@@ -41,7 +41,7 @@ ALPHA_OBSTACLE = 1.
 ALPHA_COLLISION = 1.
 ALPHA_GRAD_PHI = 1.
 
-KABSCH = True
+F_FORMATION = 0 # valeur 0, 1, ou 2 correspondant à "pas de rotation", "kabsch", "umeyama"
 
 
 class ResBlock(nn.Module):
@@ -309,11 +309,11 @@ def f_formation(sample_x, sample_x_pushforwarded, initial_positions_pushforwarde
     sample_x = sample_x.to(device)
     sample_x_pushforwarded = sample_x_pushforwarded.to(device)
     
-    if KABSCH:
+    if F_FORMATION == 1: # use kabsch
         R = kabsch(initial_positions_pushforwarded, initial_positions)
         x_centered = sample_x_pushforwarded - sample_x_pushforwarded.mean(dim=0, keepdim=True)
         x_centered = x_centered @ R.T
-    else:
+    else: # use umeyama
         R, c = umeyama(initial_positions_pushforwarded, initial_positions)
         x_centered = sample_x_pushforwarded - sample_x_pushforwarded.mean(dim=0, keepdim=True)
         x_centered = c * x_centered @ R.T
@@ -402,7 +402,7 @@ OBSTACLE_SIZE = 0.1
 #     for j in range(15) for k in range(10)
 # ]
 
-obstacles = mur_a_passer + boite
+obstacles = mur_a_passer
 
 def f_obstacle(x, obstacles):
     espsilon = 1e-4
@@ -534,8 +534,11 @@ def compute_loss_G(N_omega, N_theta, batch_size, T, verbose=False):
         sample_x_pushforwarded = G_theta(z, torch.ones_like(t)*i/nb_checkpoints, N_theta)
         with torch.no_grad():
             initial_positions_pushforwarded = G_theta(initial_positions.to(device), torch.ones(NB_DRONES, 1, device=device)*i/nb_checkpoints, N_theta)
-        formation_loss += f_formation(z, sample_x_pushforwarded, initial_positions_pushforwarded)
-        # formation_loss += f_formation_old(sample_x_pushforwarded, device=device)
+        
+        if F_FORMATION in (1, 2):
+            formation_loss += f_formation(z, sample_x_pushforwarded, initial_positions_pushforwarded)
+        else:
+            formation_loss += f_formation_old(sample_x_pushforwarded, device=device)
     # Penser à rajouter f_collision et f_obstacle
     target_loss = g(x_final)
     # print("target_loss: " + str(target_loss))
@@ -617,8 +620,8 @@ def test_wave_trajectories(n, N_theta, total_time=TOTAL_TIME, num_steps=100):
 
 ######################################################################
 
-if len(sys.argv) < 11:
-    print("usage : python3 main.py <[train / load]> <model_name> <total_time> <epsilon> <alpha_loss_g_terms> <alpha_target> <alpha_formation> <alpha_obstacle> <alpha_collision> <alpha_grad_phi>")
+if len(sys.argv) < 12:
+    print("usage : python3 main.py <[train / load]> <model_name> <total_time> <epsilon> <alpha_loss_g_terms> <alpha_target> <alpha_formation> <alpha_obstacle> <alpha_collision> <alpha_grad_phi> <0 pour interdire les rotations, 1 pour kabsch, 2 pour umeyama>")
     exit(1)
 
 TOTAL_TIME = float(sys.argv[3])
@@ -629,6 +632,7 @@ ALPHA_FORMATION = float(sys.argv[7])
 ALPHA_OBSTACLE = float(sys.argv[8])
 ALPHA_COLLISION = float(sys.argv[9])
 ALPHA_GRAD_PHI = float(sys.argv[10])
+F_FORMATION = int(sys.argv[11])
 
 TRAIN = (sys.argv[1] in ("train", "t"))
 
