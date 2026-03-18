@@ -617,6 +617,22 @@ def test_wave_trajectories(n, N_theta, total_time=TOTAL_TIME, num_steps=100):
     ax.legend()
     plt.show()
 
+def save_loss_history(loss_phi_history, loss_G_history, path):
+    """ Saves the training loss history for both φ and G, side by side in two plots."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    ax1.plot(loss_phi_history, label='Loss φ')
+    ax1.set_title('Training Loss for φ')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
+    ax1.legend()
+    ax2.plot(loss_G_history, label='Loss G', color='orange')
+    ax2.set_title('Training Loss for G')
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('Loss')
+    ax2.legend()
+    plt.tight_layout()
+    plt.savefig(path)
+    plt.close()
 
 ######################################################################
 
@@ -662,6 +678,9 @@ def main():
     epochs = 2500    # Number of training iterations (increase for convergence)
     lambda_reg = 1.0
     n = NB_DRONES # Nombre de drones
+
+    loss_phi_history = []
+    loss_G_history = []
 
     learning_rate_phi = 4e-4
     learning_rate_gen = 1e-4
@@ -714,6 +733,10 @@ def main():
         cout = loss_gen_val
         optimizer_theta.step()
 
+        # Update training history
+        loss_phi_history.append(loss_phi_val.item())
+        loss_G_history.append(loss_gen_val.item())
+
         if epoch % 10 == 0:
             print(f"Epoch {epoch} | Loss_φ: {loss_phi_val.item():.4f} | Loss_G: {loss_gen_val.item():.4f} | target: {target} | cout {cout}")
 
@@ -740,6 +763,9 @@ def main():
                     }, PATH_MODEL_N_THETA)
             except:
                 print(f"impossible de sauvegarder le fichier {PATH_MODEL_N_THETA}")
+
+            if epoch % 500 == 0 and epoch > 0:
+                save_loss_history(loss_phi_history, loss_G_history, f"figures/{MODEL_NAME}_loss_history_epoch_{epoch}.png")
 
         epoch += 1
 
