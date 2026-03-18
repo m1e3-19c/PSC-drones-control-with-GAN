@@ -90,7 +90,7 @@ class NTheta(nn.Module):
     def __init__(self):
         super(NTheta, self).__init__()
         # Input: 3 (latent) + 1 (time) = 4; Output: 3 (state)
-        self.net = ResNet(input_dim=4, output_dim=3, activation=nn.ReLU())
+        self.net = ResNet(input_dim=4, output_dim=3, activation=nn.Tanh())
 
     def forward(self, z, t):
         input_data = torch.cat([z, t], dim=-1)
@@ -405,7 +405,7 @@ OBSTACLE_SIZE = 0.1
 obstacles = mur_a_passer
 
 def f_obstacle(x, obstacles):
-    espsilon = 1e-4
+    eps = EPSILON
     x = x.to(device)
     cost = 0
     batch_size = x.size(0)
@@ -417,7 +417,7 @@ def f_obstacle(x, obstacles):
         for i in range(batch_size):
             Q = torch.norm(x[i] - obstacle_tensor)
             if Q < 2. * OBSTACLE_SIZE: # TODO : 
-                cost += 1.0 / (max(Q-OBSTACLE_SIZE, 0) + espsilon) 
+                cost += 1.0 / (max(Q-OBSTACLE_SIZE, 0) + eps) 
     return torch.tensor(cost / batch_size)
 
 
