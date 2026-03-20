@@ -4,4 +4,7 @@ models/*
 figures/*
 !figures/.gitkeep
 
+__pycache__/
+
+
 venv/
