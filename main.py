@@ -27,17 +27,8 @@ from src.losses import compute_loss_phi as compute_loss_phi
 from src.losses import compute_loss_G as compute_loss_G
 from src.losses import g as terminal_cost_g
 from src.visualization import test_wave_trajectories, save_loss_history
-from src.costs import (
-    variance,
-    initial_positions,
-    mur_a_passer,
-    OBSTACLE_SIZE,
-    obstacles,
-    f_collision,
-    f_obstacle,
-    f_formation,
-    f_formation_old,
-)
+from src.costs import variance, initial_positions, f_collision, f_obstacle, f_formation, f_formation_old
+from src.obstacles import OBSTACLE_SIZE, obstacles, boite
 
 ### Hyperparameters
 
@@ -57,9 +48,9 @@ NB_DRONES = 4
 
 # Training Params:
 
-batch_size = 60
+batch_size = 256
 T = TOTAL_TIME   # Normalized training horizon
-epochs = 2500    # Number of training iterations (increase for convergence)
+epochs = 1000000    # Number of training iterations (increase for convergence)
 lambda_reg = 1.0
 n = NB_DRONES # Number of drones for trajectory visualization
 
