@@ -4,4 +4,9 @@ models/*
 figures/*
 !figures/.gitkeep
 
+trajectories/*
+!trajectories/.gitkeep
+
+old/
+
 venv/
