@@ -28,7 +28,7 @@ from src.losses import compute_loss_G as compute_loss_G
 from src.losses import g as terminal_cost_g
 from src.visualization import test_wave_trajectories, save_loss_history
 from src.costs import variance, initial_positions, f_collision, f_obstacle, f_formation, f_formation_old
-from src.obstacles import OBSTACLE_SIZE, obstacles, boite
+from src.obstacles import OBSTACLE_SIZE, obstacles, boite, mur_a_passer
 
 ### Hyperparameters
 
