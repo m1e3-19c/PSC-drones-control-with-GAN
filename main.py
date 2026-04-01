@@ -473,7 +473,7 @@ def compute_loss_phi(N_omega, N_theta, batch_size, T, lambda_reg):
         )[0][:, i]
         laplacian += second_deriv
 
-    H_phi = torch.norm(grad_phi_x, dim=-1, keepdim=True)
+    H_phi = torch.norm(ALPHA_GRAD_PHI * grad_phi_x, dim=-1, keepdim=True)
     loss_phi_terms = phi_omega(x, torch.zeros_like(t), N_omega) + grad_phi_t \
                      + (sigma**2 / 2) * laplacian + H_phi
     loss_phi_mean = loss_phi_terms.mean()
@@ -560,7 +560,7 @@ def compute_loss_G(N_omega, N_theta, batch_size, T, verbose=False):
 
 
 
-def test_wave_trajectories(n, N_theta, total_time=TOTAL_TIME, num_steps=100):
+def test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps=100):
     """
     For three drones initialized at the vertices of an equilateral triangle,
     generate and plot their trajectories over a total time period (in seconds).
@@ -573,22 +573,29 @@ def test_wave_trajectories(n, N_theta, total_time=TOTAL_TIME, num_steps=100):
 
     # Prepare a list to hold trajectories for each drone
     trajectories = []  # Each entry: NumPy array of shape [num_steps, 3]
+    value_function = []
 
     # Generate equally spaced time instants over the total time.
     times = torch.linspace(0, total_time, num_steps, device=device)
 
     for i in range(n):  # For each drone
         traj = []
+        values = []
         for t_phys in times:
             # Normalize time to [0, 1] for network input
             t_norm = t_phys / total_time
             t_tensor = torch.tensor([[t_norm]], device=device)
             z = initial_positions[i:i+1]  # Shape: [1, 3]
             pos = G_theta(z, t_tensor, N_theta)  # Output: [1, 3]
+            val = phi_omega(z, t_tensor, N_omega)
             traj.append(pos[0])
+            values.append(val[0][0])
+        
         traj = torch.stack(traj)  # Shape: [num_steps, 3]
+        values = torch.stack(values)
         # Detach before converting to NumPy
         trajectories.append(traj.cpu().detach().numpy())
+        value_function.append(values.cpu().detach().numpy())
 
     # with open(PATH / "trajectories" / ("trajectories_" + MODEL_NAME + ".txt"), "w") as file:
     #     file.write(str(trajectories))
@@ -598,10 +605,12 @@ def test_wave_trajectories(n, N_theta, total_time=TOTAL_TIME, num_steps=100):
 
     with open(csv_path, "w", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow(["drone", "step", "x", "y", "z"])
+        writer.writerow(["drone", "step", "x", "y", "z", "value"])
         for i, traj in enumerate(trajectories):
+            values = value_function[i]
             for step, (x, y, z) in enumerate(traj):
-                writer.writerow([i, step, x, y, z])
+                val = values[step]
+                writer.writerow([i, step, x, y, z, val])
 
     # Plot the trajectories
     fig = plt.figure(figsize=(8, 6))
@@ -786,7 +795,7 @@ def main():
             break
 
     # After training, test by plotting trajectories of n drones over 20 seconds.
-    test_wave_trajectories(n, N_theta, total_time=TOTAL_TIME, num_steps=20)
+    test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps=20)
 
 
 if __name__ == "__main__":
