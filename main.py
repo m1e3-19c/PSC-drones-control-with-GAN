@@ -23,6 +23,7 @@ import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 import numpy as np
+import csv
 from mpl_toolkits.mplot3d import Axes3D  # For 3D plotting
 
 # Set device (use GPU if available)
@@ -589,8 +590,18 @@ def test_wave_trajectories(n, N_theta, total_time=TOTAL_TIME, num_steps=100):
         # Detach before converting to NumPy
         trajectories.append(traj.cpu().detach().numpy())
 
-    with open(PATH / "trajectories" / ("trajectories_" + MODEL_NAME + ".txt"), "w") as file:
-        file.write(str(trajectories))
+    # with open(PATH / "trajectories" / ("trajectories_" + MODEL_NAME + ".txt"), "w") as file:
+    #     file.write(str(trajectories))
+
+    csv_path = PATH / "trajectories" / ("trajectories_" + MODEL_NAME + ".csv")
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(csv_path, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["drone", "step", "x", "y", "z"])
+        for i, traj in enumerate(trajectories):
+            for step, (x, y, z) in enumerate(traj):
+                writer.writerow([i, step, x, y, z])
 
     # Plot the trajectories
     fig = plt.figure(figsize=(8, 6))
