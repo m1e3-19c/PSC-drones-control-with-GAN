@@ -65,7 +65,7 @@ MODEL_NAME = (
     f"alphaForm-{ALPHA_FORMATION}_"
     f"alphaObst-{ALPHA_OBSTACLE}_"
     f"alphaCol-{ALPHA_COLLISION}_"
-    f"alphaGradPhi-{ALPHA_GRAD_PHI}"
+    f"alphaGradPhi-{ALPHA_GRAD_PHI}_"
     f"config-{CHOSEN_INITIAL_FORMATION}-{CHOSEN_FINAL_FORMATION}-{ENVIRONMENT}"
 )
 PATH_MODEL_N_OMEGA = PATH / "models" / (MODEL_NAME + "_N_omega")
