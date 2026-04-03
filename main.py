@@ -30,17 +30,45 @@ from mpl_toolkits.mplot3d import Axes3D  # For 3D plotting
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Training Params:
-NB_DRONES = 4
+if len(sys.argv) < 16:
+    print("usage : python3 main.py <[train / load]> <model_name> <total_time> <epsilon> <alpha_loss_g_terms> <alpha_target> <alpha_formation> <alpha_obstacle> <alpha_collision> <alpha_grad_phi> <fonction de cout> <nb drones> <formation voulue au départ> <formation voulue à l'arrivée> <obstacles>")
+    exit(1)
 
-TOTAL_TIME = 1
+TOTAL_TIME = float(sys.argv[3])
+EPSILON = float(sys.argv[4])
+ALPHA_LOSS_G_TERMS = float(sys.argv[5])
+ALPHA_TARGET = float(sys.argv[6])
+ALPHA_FORMATION = float(sys.argv[7])
+ALPHA_OBSTACLE = float(sys.argv[8])
+ALPHA_COLLISION = float(sys.argv[9])
+ALPHA_GRAD_PHI = float(sys.argv[10])
+F_FORMATION = int(sys.argv[11]) # entier pour la fonction de cout de formation (0 = pas de rotation autorisée, 1 = rotation autorisée avec Kabsch, 2 = rotation autorisée avec umeyama)
+NB_DRONES = int(sys.argv[12])
+CHOSEN_INITIAL_FORMATION = int(sys.argv[13]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
+CHOSEN_FINAL_FORMATION = int(sys.argv[14]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
+ENVIRONMENT = int(sys.argv[15]) # Entier pour la configuration d'obstacles voulue : (0 = rien, 1 = 1 mur avec virage à faire, 2 = mur avec trou, 3 = deux grosses boules)
 
-EPSILON = 1e-4
-ALPHA_LOSS_G_TERMS = 1.
-ALPHA_TARGET = 500.
-ALPHA_FORMATION = 70.
-ALPHA_OBSTACLE = 1.
-ALPHA_COLLISION = 1.
-ALPHA_GRAD_PHI = 1.
+INITIAL_BARYCENTER = torch.tensor([0, -0.5, 0], device=device)
+FINAL_BARYCENTER = torch.tensor([0, 1.25, 0], device=device)
+
+TRAIN = (sys.argv[1] in ("train", "t"))
+
+PATH = pathlib.Path(sys.argv[0]).resolve().parent
+BASE_MODEL_NAME = sys.argv[2]
+MODEL_NAME = (
+    f"{BASE_MODEL_NAME}_"
+    f"{NB_DRONES}-drones_"
+    f"T-{TOTAL_TIME}_"
+    f"eps-{EPSILON}_"
+    f"alphaG-{ALPHA_LOSS_G_TERMS}_"
+    f"alphaTarget-{ALPHA_TARGET}_"
+    f"alphaForm-{ALPHA_FORMATION}_"
+    f"alphaObst-{ALPHA_OBSTACLE}_"
+    f"alphaCol-{ALPHA_COLLISION}_"
+    f"alphaGradPhi-{ALPHA_GRAD_PHI}"
+)
+PATH_MODEL_N_OMEGA = PATH / "models" / (MODEL_NAME + "_N_omega")
+PATH_MODEL_N_THETA = PATH / "models" / (MODEL_NAME + "_N_theta")
 
 F_FORMATION = 0 # valeur 0, 1, ou 2 correspondant à "pas de rotation", "kabsch", "umeyama"
 
@@ -119,20 +147,103 @@ def G_theta(z, t, N_theta:NTheta):
 SUB-BLOCK: Formation cost
 '''
 A = 0.1
-#the generate wave function is just a way for us to make a list of positions in the form  of a wave for the generate_density function bu can be changed by just List [N,3]
-#that  has the positions you wish to have
-def generate_wave(n_samples) :
-    # k = 2*m.pi/0.5
-    # x = torch.linspace(-0.5, 0.5, n_samples, device=device)
-    # y = A * torch.sin(k * x)
-    # z = torch.ones_like(x, device=device) * 0
-    # return torch.stack([x, y, z], dim=1)
-    k = 2*m.pi/0.5
-    x = torch.linspace(-1/4, 1/4, n_samples, device=device)
-    y = torch.ones_like(x, device=device) * (-1/2)
-    z = torch.zeros_like(x, device=device)
-    return torch.stack([x, y, z], dim=1)
 
+# boite = [
+#     [x, 1.5, z]
+#     for x in torch.linspace(-0.5, 0.5, 6) for z in torch.linspace(-0.5, 0.5, 6)
+# ] + [
+#     [-0.5, y, z]
+#     for y in torch.linspace(0.5, 1.5, 6) for z in torch.linspace(-0.5, 0.5, 6)
+# ] + [
+#     [0.5, y, z]
+#     for y in torch.linspace(0.5, 1.5, 7) for z in torch.linspace(-0.5, 0.5, 6)
+# ] + [
+#     [x, y, -0.5]
+#     for x in torch.linspace(-0.5, 0.5, 6) for y in torch.linspace(0.5, 1.5, 7)
+# ] + [
+#     [x, y, 0.5]
+#     for x in torch.linspace(-0.5, 0.5, 6) for y in torch.linspace(0.5, 1.5, 7)
+# ]
+
+
+OBSTACLES = []
+OBSTACLE_SIZE = 0.1
+
+def set_obstacles(configuration):
+    global INITIAL_BARYCENTER, FINAL_BARYCENTER, OBSTACLES, OBSTACLE_SIZE
+    if configuration == 0: # Pas d'obstacle
+        INITIAL_BARYCENTER = torch.tensor([0, -0.5, 0], device=device)
+        FINAL_BARYCENTER = torch.tensor([0, 1.25, 0], device=device)
+
+    elif configuration == 1: # Juste un mur à contourner
+        OBSTACLES += [
+            [x, 0.4, z]
+            for x in torch.linspace(-0.5, 0.2, 5) for z in torch.linspace(-0.5, 0.5, 6)
+        ]
+        INITIAL_BARYCENTER = torch.tensor([-0.25, -0.25, 0], device=device)
+        FINAL_BARYCENTER = torch.tensor([0, 1.25, 0], device=device)
+
+    elif configuration == 2:
+        OBSTACLES += [
+            [x, 0.4, z]
+            for x in torch.linspace(-0.5, -0.2, 3) for z in torch.linspace(-0.5, 0.5, 6)
+        ] + [
+            [x, 0.4, z]
+            for x in torch.linspace(0.2, 0.5, 3) for z in torch.linspace(-0.5, 0.5, 6)
+        ]
+        INITIAL_BARYCENTER = torch.tensor([0, -0.5, 0], device=device)
+        FINAL_BARYCENTER = torch.tensor([0, 1.25, 0], device=device)
+    else:
+        OBSTACLES += [
+            [0.3, 0.2, 0],
+            [-0.3, 0.8, 0]
+        ]
+        OBSTACLE_SIZE = 0.25
+
+        INITIAL_BARYCENTER = torch.tensor([0, -0.5, 0], device=device)
+        FINAL_BARYCENTER = torch.tensor([0, 1.5, 0], device=device)
+
+
+
+set_obstacles(ENVIRONMENT)
+
+
+def set_positions(nb_drones, configuration, barycenter) :
+    res = torch.tensor([])
+    if configuration == 0: # Ligne droite
+        x = torch.linspace(-1/4, 1/4, nb_drones, device=device)
+        y = torch.ones_like(x, device=device) * (-1/2)
+        z = torch.zeros_like(x, device=device)
+        res = torch.stack([x, y, z], dim=1)
+    elif configuration == 1:
+        t = torch.linspace(-torch.pi, torch.pi * (1 - 2 / (NB_DRONES - 1))  , nb_drones, device=device)
+        radius = 1 / 4.
+        x = torch.cos(t) * radius
+        y = torch.sin(t) * radius - 1 / 4.
+        z = torch.zeros_like(x, device=device)
+        res = torch.stack([x, y, z], dim=1)
+    else: # Les oies sauvages
+        x = []
+        y = []
+        nb_layers = int(nb_drones ** 0.5) + 1
+        n = 0
+        total_size = 3 / 4
+        drone_gap = total_size / (2 * nb_layers - 1)
+        for i in range(nb_layers):
+            for j in range(2 * i + 1):
+                if n < nb_drones:
+                    n += 1
+                    x.append((nb_layers - i + j) * drone_gap - total_size / 2)
+                    y.append((nb_layers - i) * 1.41 * drone_gap - 0.5)
+
+        x = torch.tensor(x, device=device)
+        y = torch.tensor(y, device=device)
+        z = torch.zeros_like(x, device=device)
+        
+        res = torch.stack([x, y, z], dim=1)
+
+    return res - torch.mean(res, 0, keepdim=True) + barycenter
+        
 variance = 0.003
 
 def generate_density(x) :
@@ -147,8 +258,11 @@ def generate_density(x) :
         return gaussians.sum(dim=1) / (x_centered.shape[0] * norm_const)
     return density_estimated
 
-initial_positions = generate_wave(NB_DRONES)
-density_real = generate_density(initial_positions)
+INITIAL_POSITIONS = set_positions(NB_DRONES, CHOSEN_INITIAL_FORMATION, INITIAL_BARYCENTER)
+INITIAL_DENSITY = generate_density(INITIAL_POSITIONS)
+
+FINAL_POSITIONS = set_positions(NB_DRONES, CHOSEN_FINAL_FORMATION, FINAL_BARYCENTER)
+FINAL_DENSITY = generate_density(FINAL_POSITIONS)
 
 def sample_from_density(density_func, n_samples, bounds=(-1, 1), M=None):
     """Méthode du rejet pour échantilloner selon la densité"""
@@ -184,7 +298,7 @@ def f_formation_old(x, device=device):
         gaussians = torch.exp(-dist2 / (2 * sigma**2))
         norm_const = torch.tensor(2 * torch.pi * variance, device=device)**(3/2)
         return gaussians.sum(dim=1) / (x_centered.shape[0] * norm_const)
-    d = distance_L1_torch(density_real, density_estimated, n_grid=50, device=device)
+    d = distance_L1_torch(INITIAL_DENSITY, density_estimated, n_grid=50, device=device)
     return d
 
 # def compute_covariance_matrix(centered_samples):
@@ -311,11 +425,11 @@ def f_formation(sample_x, sample_x_pushforwarded, initial_positions_pushforwarde
     sample_x_pushforwarded = sample_x_pushforwarded.to(device)
     
     if F_FORMATION == 1: # use kabsch
-        R = kabsch(initial_positions_pushforwarded, initial_positions)
+        R = kabsch(initial_positions_pushforwarded, FINAL_POSITIONS)
         x_centered = sample_x_pushforwarded - sample_x_pushforwarded.mean(dim=0, keepdim=True)
         x_centered = x_centered @ R.T
     else: # use umeyama
-        R, c = umeyama(initial_positions_pushforwarded, initial_positions)
+        R, c = umeyama(initial_positions_pushforwarded, FINAL_POSITIONS)
         x_centered = sample_x_pushforwarded - sample_x_pushforwarded.mean(dim=0, keepdim=True)
         x_centered = c * x_centered @ R.T
 
@@ -327,7 +441,7 @@ def f_formation(sample_x, sample_x_pushforwarded, initial_positions_pushforwarde
         gaussians = torch.exp(-dist2 / (2 * sigma**2))
         norm_const = torch.tensor(2 * torch.pi * variance, device=device)**(3/2)
         return gaussians.sum(dim=1) / (x_centered.shape[0] * norm_const)
-    d = distance_L1_torch(density_real, density_estimated, n_grid=50, device=device)
+    d = distance_L1_torch(FINAL_DENSITY, density_estimated, n_grid=50, device=device)
     return d
 '''
 SUB-BLOCK: Collision Cost
@@ -339,40 +453,12 @@ def f_collision(x_batch):
     mask = ~torch.eye(dist_sq.size(0), dtype=torch.bool, device=dist_sq.device)
     dist_sq_no_diag = dist_sq.masked_select(mask).view(dist_sq.size(0), -1)
     loss_matrix = 1.0 / (dist_sq_no_diag + EPSILON)
-    if loss_matrix.mean() > 0.03 :
-      return torch.tensor(0.0, device=device)
-    else :
-      return loss_matrix.mean()
+    
+    return loss_matrix.mean()
 
 '''
 SUB-BLOCK: Obstacle Costs
 '''
-#the list obstacles is the list you can modify to put obstacles however you like here below lies just an example of obstacles that can be configurated
-mur_a_passer = [
-    [x, 0.4, z]
-    for x in torch.linspace(-0.5, -0.2, 3) for z in torch.linspace(-0.5, 0.5, 6)
-] + [
-    [x, 0.4, z]
-    for x in torch.linspace(0.2, 0.5, 3) for z in torch.linspace(-0.5, 0.5, 6)
-]
-boite = [
-    [x, 1.5, z]
-    for x in torch.linspace(-0.5, 0.5, 6) for z in torch.linspace(-0.5, 0.5, 6)
-] + [
-    [-0.5, y, z]
-    for y in torch.linspace(0.5, 1.5, 6) for z in torch.linspace(-0.5, 0.5, 6)
-] + [
-    [0.5, y, z]
-    for y in torch.linspace(0.5, 1.5, 7) for z in torch.linspace(-0.5, 0.5, 6)
-] + [
-    [x, y, -0.5]
-    for x in torch.linspace(-0.5, 0.5, 6) for y in torch.linspace(0.5, 1.5, 7)
-] + [
-    [x, y, 0.5]
-    for x in torch.linspace(-0.5, 0.5, 6) for y in torch.linspace(0.5, 1.5, 7)
-]
-
-OBSTACLE_SIZE = 0.1
 # boite = [
 #     [
 #         -1/2 + i / 7,
@@ -402,8 +488,6 @@ OBSTACLE_SIZE = 0.1
 #     ]
 #     for j in range(15) for k in range(10)
 # ]
-
-obstacles = mur_a_passer
 
 def f_obstacle(x, obstacles):
     eps = EPSILON
@@ -490,10 +574,14 @@ def compute_loss_phi(N_omega, N_theta, batch_size, T, lambda_reg):
     return loss_phi_mean + loss_HJB + f_collision(x)
 
 
-x_target = torch.tensor([0,1,0], device="cpu")
 def g(x):
     x = x.to(device)
-    return torch.norm(x.mean(dim=0) - x_target.to(device)) + f_formation_old(x)
+    return torch.norm(x.mean(dim=0) - FINAL_BARYCENTER.to(device))
+
+def f_target(x):
+    x = x.to(device)
+    return torch.norm(x.mean(dim=0) - FINAL_BARYCENTER.to(device)) + f_formation_old(x)
+
 
 def compute_loss_G(N_omega, N_theta, batch_size, T, verbose=False):
     """
@@ -534,14 +622,14 @@ def compute_loss_G(N_omega, N_theta, batch_size, T, verbose=False):
     for i in range(1,nb_checkpoints + 1) :
         sample_x_pushforwarded = G_theta(z, torch.ones_like(t)*i/nb_checkpoints, N_theta)
         with torch.no_grad():
-            initial_positions_pushforwarded = G_theta(initial_positions.to(device), torch.ones(NB_DRONES, 1, device=device)*i/nb_checkpoints, N_theta)
+            initial_positions_pushforwarded = G_theta(INITIAL_POSITIONS.to(device), torch.ones(NB_DRONES, 1, device=device)*i/nb_checkpoints, N_theta)
         
         if F_FORMATION in (1, 2):
             formation_loss += f_formation(z, sample_x_pushforwarded, initial_positions_pushforwarded)
         else:
             formation_loss += f_formation_old(sample_x_pushforwarded, device=device)
     # Penser à rajouter f_collision et f_obstacle
-    target_loss = g(x_final)
+    target_loss = f_target(x_final)
     # print("target_loss: " + str(target_loss))
     # print(formation_loss/5)
 
@@ -560,7 +648,7 @@ def compute_loss_G(N_omega, N_theta, batch_size, T, verbose=False):
 
 
 
-def test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps=100):
+def test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps=100, visu=False):
     """
     For three drones initialized at the vertices of an equilateral triangle,
     generate and plot their trajectories over a total time period (in seconds).
@@ -585,11 +673,20 @@ def test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps
             # Normalize time to [0, 1] for network input
             t_norm = t_phys / total_time
             t_tensor = torch.tensor([[t_norm]], device=device)
-            z = initial_positions[i:i+1]  # Shape: [1, 3]
+            z = INITIAL_POSITIONS[i:i+1]  # Shape: [1, 3]
             pos = G_theta(z, t_tensor, N_theta)  # Output: [1, 3]
             val = phi_omega(z, t_tensor, N_omega)
             traj.append(pos[0])
             values.append(val[0][0])
+            if visu:
+                t_norm = t_phys / total_time
+                t_tensor = torch.tensor([[t_norm]], device=device)
+                z = FINAL_POSITIONS[i:i+1]  # Shape: [1, 3]
+                pos = G_theta(z, t_tensor, N_theta)  # Output: [1, 3]
+                val = phi_omega(z, t_tensor, N_omega)
+                traj.append(pos[0])
+                values.append(val[0][0])
+                break
         
         traj = torch.stack(traj)  # Shape: [num_steps, 3]
         values = torch.stack(values)
@@ -621,14 +718,14 @@ def test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps
         print("Position finale drône " + str(i) + ": " + str(traj[-1]))
     
     u, v = np.mgrid[0:2*np.pi:10j, 0:np.pi:5j]  # résolution de la sphère
-    for obs in mur_a_passer:
+    for obs in OBSTACLES:
         cx, cy, cz = float(obs[0]), float(obs[1]), float(obs[2])
         x_s = cx + OBSTACLE_SIZE * np.cos(u) * np.sin(v)
         y_s = cy + OBSTACLE_SIZE * np.sin(u) * np.sin(v)
         z_s = cz + OBSTACLE_SIZE * np.cos(v)
         ax.plot_surface(x_s, y_s, z_s, color='k', alpha=0.6, linewidth=0)
     ax.set_title("Trajectories of " + str(n) + f" Drones Over {total_time: .1f} Seconds\n"+MODEL_NAME)
-    ax.plot(x_target[0], x_target[1], x_target[2], 'o', c="yellow")
+    ax.plot(FINAL_BARYCENTER.to("cpu")[0], FINAL_BARYCENTER.to("cpu")[1], FINAL_BARYCENTER.to("cpu")[2], 'o', c="yellow")
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
@@ -658,37 +755,7 @@ def save_loss_history(loss_phi_history, loss_G_history, path):
 
 ######################################################################
 
-if len(sys.argv) < 12:
-    print("usage : python3 main.py <[train / load]> <model_name> <total_time> <epsilon> <alpha_loss_g_terms> <alpha_target> <alpha_formation> <alpha_obstacle> <alpha_collision> <alpha_grad_phi> <0 pour interdire les rotations, 1 pour kabsch, 2 pour umeyama>")
-    exit(1)
 
-TOTAL_TIME = float(sys.argv[3])
-EPSILON = float(sys.argv[4])
-ALPHA_LOSS_G_TERMS = float(sys.argv[5])
-ALPHA_TARGET = float(sys.argv[6])
-ALPHA_FORMATION = float(sys.argv[7])
-ALPHA_OBSTACLE = float(sys.argv[8])
-ALPHA_COLLISION = float(sys.argv[9])
-ALPHA_GRAD_PHI = float(sys.argv[10])
-F_FORMATION = int(sys.argv[11])
-
-TRAIN = (sys.argv[1] in ("train", "t"))
-
-PATH = pathlib.Path(sys.argv[0]).resolve().parent
-BASE_MODEL_NAME = sys.argv[2]
-MODEL_NAME = (
-    f"{BASE_MODEL_NAME}_"
-    f"T-{TOTAL_TIME}_"
-    f"eps-{EPSILON}_"
-    f"alphaG-{ALPHA_LOSS_G_TERMS}_"
-    f"alphaTarget-{ALPHA_TARGET}_"
-    f"alphaForm-{ALPHA_FORMATION}_"
-    f"alphaObst-{ALPHA_OBSTACLE}_"
-    f"alphaCol-{ALPHA_COLLISION}_"
-    f"alphaGradPhi-{ALPHA_GRAD_PHI}"
-)
-PATH_MODEL_N_OMEGA = PATH / "models" / (MODEL_NAME + "_N_omega")
-PATH_MODEL_N_THETA = PATH / "models" / (MODEL_NAME + "_N_theta")
 
 
     
@@ -791,11 +858,8 @@ def main():
 
         epoch += 1
 
-        if visu:
-            break
-
     # After training, test by plotting trajectories of n drones over 20 seconds.
-    test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps=20)
+    test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps=20, visu=visu)
 
 
 if __name__ == "__main__":
