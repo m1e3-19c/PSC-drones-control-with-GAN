@@ -299,7 +299,7 @@ def f_formation_old(x, device=device):
         gaussians = torch.exp(-dist2 / (2 * sigma**2))
         norm_const = torch.tensor(2 * torch.pi * variance, device=device)**(3/2)
         return gaussians.sum(dim=1) / (x_centered.shape[0] * norm_const)
-    d = distance_L1_torch(INITIAL_DENSITY, density_estimated, n_grid=50, device=device)
+    d = distance_L1_torch(FINAL_DENSITY, density_estimated, n_grid=50, device=device)
     return d
 
 # def compute_covariance_matrix(centered_samples):
@@ -638,12 +638,12 @@ def compute_loss_G(N_omega, N_theta, batch_size, T, verbose=False):
         print("-------------------------------------------------")
         print(MODEL_NAME)
         print(f"{'collision_loss':20s}", f"{ALPHA_COLLISION * f_collision(x).item():.3f}")
-        print(f"{'obstacle_loss':20s}", f"{ALPHA_OBSTACLE * f_obstacle(x,obstacles).item():.3f}")
+        print(f"{'obstacle_loss':20s}", f"{ALPHA_OBSTACLE * f_obstacle(x,OBSTACLES).item():.3f}")
         print(f"{'formation_loss':20s}", f"{ALPHA_FORMATION*formation_loss.item():.3f}")
         print(f"{'target_loss':20s}", f"{ALPHA_TARGET*target_loss.item():.3f}")
         print(f"{'H_phi':20s}", f"{H_phi.mean().item():.3f}")
         print(f"{'loss_G_terms':20s}", f"{ALPHA_LOSS_G_TERMS * loss_G_terms.mean().item():.3f}")
-    return target_loss, ALPHA_LOSS_G_TERMS * loss_G_terms.mean() + ALPHA_TARGET*target_loss + ALPHA_FORMATION*formation_loss + ALPHA_OBSTACLE * f_obstacle(x, obstacles) + ALPHA_COLLISION * f_collision(x)
+    return target_loss, ALPHA_LOSS_G_TERMS * loss_G_terms.mean() + ALPHA_TARGET*target_loss + ALPHA_FORMATION*formation_loss + ALPHA_OBSTACLE * f_obstacle(x, OBSTACLES) + ALPHA_COLLISION * f_collision(x)
 
 
 
