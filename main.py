@@ -66,6 +66,7 @@ MODEL_NAME = (
     f"alphaObst-{ALPHA_OBSTACLE}_"
     f"alphaCol-{ALPHA_COLLISION}_"
     f"alphaGradPhi-{ALPHA_GRAD_PHI}"
+    f"config-{CHOSEN_INITIAL_FORMATION}-{CHOSEN_FINAL_FORMATION}-{ENVIRONMENT}"
 )
 PATH_MODEL_N_OMEGA = PATH / "models" / (MODEL_NAME + "_N_omega")
 PATH_MODEL_N_THETA = PATH / "models" / (MODEL_NAME + "_N_theta")
@@ -453,7 +454,7 @@ def f_collision(x_batch):
     mask = ~torch.eye(dist_sq.size(0), dtype=torch.bool, device=dist_sq.device)
     dist_sq_no_diag = dist_sq.masked_select(mask).view(dist_sq.size(0), -1)
     loss_matrix = 1.0 / (dist_sq_no_diag + EPSILON)
-    
+
     return loss_matrix.mean()
 
 '''
