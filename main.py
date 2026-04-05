@@ -30,23 +30,24 @@ from mpl_toolkits.mplot3d import Axes3D  # For 3D plotting
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Training Params:
-if len(sys.argv) < 16:
-    print("usage : python3 main.py <[train / load]> <model_name> <total_time> <epsilon> <alpha_loss_g_terms> <alpha_target> <alpha_formation> <alpha_obstacle> <alpha_collision> <alpha_grad_phi> <fonction de cout> <nb drones> <formation voulue au départ> <formation voulue à l'arrivée> <obstacles>")
+if len(sys.argv) < 17:
+    print("usage : python3 main.py <[train / load]> <model_name> <total_time> <variance> <epsilon> <alpha_loss_g_terms> <alpha_target> <alpha_formation> <alpha_obstacle> <alpha_collision> <alpha_grad_phi> <fonction de cout> <nb drones> <formation voulue au départ> <formation voulue à l'arrivée> <obstacles>")
     exit(1)
 
 TOTAL_TIME = float(sys.argv[3])
-EPSILON = float(sys.argv[4])
-ALPHA_LOSS_G_TERMS = float(sys.argv[5])
-ALPHA_TARGET = float(sys.argv[6])
-ALPHA_FORMATION = float(sys.argv[7])
-ALPHA_OBSTACLE = float(sys.argv[8])
-ALPHA_COLLISION = float(sys.argv[9])
-ALPHA_GRAD_PHI = float(sys.argv[10])
-F_FORMATION = int(sys.argv[11]) # entier pour la fonction de cout de formation (0 = pas de rotation autorisée, 1 = rotation autorisée avec Kabsch, 2 = rotation autorisée avec umeyama)
-NB_DRONES = int(sys.argv[12])
-CHOSEN_INITIAL_FORMATION = int(sys.argv[13]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
-CHOSEN_FINAL_FORMATION = int(sys.argv[14]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
-ENVIRONMENT = int(sys.argv[15]) # Entier pour la configuration d'obstacles voulue : (0 = rien, 1 = 1 mur avec virage à faire, 2 = mur avec trou, 3 = deux grosses boules)
+VARIANCE = float(sys.argv[4])
+EPSILON = float(sys.argv[5])
+ALPHA_LOSS_G_TERMS = float(sys.argv[6])
+ALPHA_TARGET = float(sys.argv[7])
+ALPHA_FORMATION = float(sys.argv[8])
+ALPHA_OBSTACLE = float(sys.argv[9])
+ALPHA_COLLISION = float(sys.argv[10])
+ALPHA_GRAD_PHI = float(sys.argv[11])
+F_FORMATION = int(sys.argv[12]) # entier pour la fonction de cout de formation (0 = pas de rotation autorisée, 1 = rotation autorisée avec Kabsch, 2 = rotation autorisée avec umeyama)
+NB_DRONES = int(sys.argv[13])
+CHOSEN_INITIAL_FORMATION = int(sys.argv[14]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
+CHOSEN_FINAL_FORMATION = int(sys.argv[15]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
+ENVIRONMENT = int(sys.argv[16]) # Entier pour la configuration d'obstacles voulue : (0 = rien, 1 = 1 mur avec virage à faire, 2 = mur avec trou, 3 = deux grosses boules)
 
 INITIAL_BARYCENTER = torch.tensor([0, -0.5, 0], device=device)
 FINAL_BARYCENTER = torch.tensor([0, 1.25, 0], device=device)
@@ -59,6 +60,7 @@ MODEL_NAME = (
     f"{BASE_MODEL_NAME}_"
     f"{NB_DRONES}-drones_"
     f"T-{TOTAL_TIME}_"
+    f"variance-{VARIANCE}_"
     f"eps-{EPSILON}_"
     f"alphaG-{ALPHA_LOSS_G_TERMS}_"
     f"alphaTarget-{ALPHA_TARGET}_"
@@ -73,6 +75,8 @@ PATH_MODEL_N_THETA = PATH / "models" / (MODEL_NAME + "_N_theta")
 
 F_FORMATION = 0 # valeur 0, 1, ou 2 correspondant à "pas de rotation", "kabsch", "umeyama"
 
+
+SIGMA = np.sqrt(VARIANCE)
 
 class ResBlock(nn.Module):
     def __init__(self, in_features, out_features, activation=nn.ReLU(), skip_weight=0.5):
@@ -245,17 +249,16 @@ def set_positions(nb_drones, configuration, barycenter) :
 
     return res - torch.mean(res, 0, keepdim=True) + barycenter
         
-variance = 0.003
+# variance = 0.003
 
 def generate_density(x) :
     x_centered = x - x.mean(dim=0, keepdim=True)
-    sigma = np.sqrt(variance)
     def density_estimated(pts):
         pts = pts.to(device)
         diff = pts.unsqueeze(1) - x_centered.unsqueeze(0)
         dist2 = (diff ** 2).sum(dim=-1)
-        gaussians = torch.exp(-dist2 / (2 * sigma**2))
-        norm_const = torch.tensor(2 * torch.pi * variance, device=device)**(3/2)
+        gaussians = torch.exp(-dist2 / (2 * SIGMA**2))
+        norm_const = torch.tensor(2 * torch.pi * VARIANCE, device=device)**(3/2)
         return gaussians.sum(dim=1) / (x_centered.shape[0] * norm_const)
     return density_estimated
 
@@ -291,13 +294,12 @@ def distance_L1_torch(p_func, q_func, n_grid, a=-1.0, b=2.0, device=device):
 def f_formation_old(x, device=device):
     x = x.to(device)
     x_centered = x - x.mean(dim=0, keepdim=True)
-    sigma = np.sqrt(variance)
     def density_estimated(pts):
         pts = pts.to(device)
         diff = pts.unsqueeze(1) - x_centered.unsqueeze(0)
         dist2 = (diff ** 2).sum(dim=-1)
-        gaussians = torch.exp(-dist2 / (2 * sigma**2))
-        norm_const = torch.tensor(2 * torch.pi * variance, device=device)**(3/2)
+        gaussians = torch.exp(-dist2 / (2 * SIGMA**2))
+        norm_const = torch.tensor(2 * torch.pi * VARIANCE, device=device)**(3/2)
         return gaussians.sum(dim=1) / (x_centered.shape[0] * norm_const)
     d = distance_L1_torch(FINAL_DENSITY, density_estimated, n_grid=50, device=device)
     return d
@@ -434,13 +436,12 @@ def f_formation(sample_x, sample_x_pushforwarded, initial_positions_pushforwarde
         x_centered = sample_x_pushforwarded - sample_x_pushforwarded.mean(dim=0, keepdim=True)
         x_centered = c * x_centered @ R.T
 
-    sigma = np.sqrt(variance)
     def density_estimated(pts):
         pts = pts.to(device)
         diff = pts.unsqueeze(1) - x_centered.unsqueeze(0)
         dist2 = (diff ** 2).sum(dim=-1)
-        gaussians = torch.exp(-dist2 / (2 * sigma**2))
-        norm_const = torch.tensor(2 * torch.pi * variance, device=device)**(3/2)
+        gaussians = torch.exp(-dist2 / (2 * SIGMA**2))
+        norm_const = torch.tensor(2 * torch.pi * VARIANCE, device=device)**(3/2)
         return gaussians.sum(dim=1) / (x_centered.shape[0] * norm_const)
     d = distance_L1_torch(FINAL_DENSITY, density_estimated, n_grid=50, device=device)
     return d
@@ -533,7 +534,6 @@ def compute_loss_phi(N_omega, N_theta, batch_size, T, lambda_reg):
     """
     Computes the loss for the phi network using derivative and collision terms.
     """
-    sigma = np.sqrt(variance)
     # Sample latent variables and time (uniform in [0, T])
     z = generate_sample(batch_size)
     t = torch.rand(batch_size, 1, requires_grad=True, device=device) * T
@@ -560,7 +560,7 @@ def compute_loss_phi(N_omega, N_theta, batch_size, T, lambda_reg):
 
     H_phi = torch.norm(ALPHA_GRAD_PHI * grad_phi_x, dim=-1, keepdim=True)
     loss_phi_terms = phi_omega(x, torch.zeros_like(t), N_omega) + grad_phi_t \
-                     + (sigma**2 / 2) * laplacian + H_phi
+                     + (SIGMA**2 / 2) * laplacian + H_phi
     loss_phi_mean = loss_phi_terms.mean()
 
     # Regularization term penalizing deviation from the HJB residual.
@@ -568,7 +568,7 @@ def compute_loss_phi(N_omega, N_theta, batch_size, T, lambda_reg):
     for i in range(batch_size):
         HJB_residual[i] = torch.norm(
             # Penser à rajouter f_collision
-            grad_phi_t[i] + (sigma**2 / 2)*laplacian[i] + H_phi[i]
+            grad_phi_t[i] + (SIGMA**2 / 2)*laplacian[i] + H_phi[i]
         )
     loss_HJB = lambda_reg * HJB_residual.mean()
 
@@ -588,7 +588,6 @@ def compute_loss_G(N_omega, N_theta, batch_size, T, verbose=False):
     """
     Computes the loss for the generator network.
     """
-    sigma = np.sqrt(variance)
     # Sample latent variables and time (uniform in [0, T])
     z = generate_sample(batch_size)
     t = torch.rand(batch_size, 1, requires_grad=True, device=device) * T
@@ -614,7 +613,7 @@ def compute_loss_G(N_omega, N_theta, batch_size, T, verbose=False):
         laplacian += second_deriv
     
     H_phi = torch.norm(ALPHA_GRAD_PHI * grad_phi_x, dim=-1, keepdim=True)
-    loss_G_terms = grad_phi_t + (sigma**2 / 2)*laplacian + H_phi
+    loss_G_terms = grad_phi_t + (SIGMA**2 / 2)*laplacian + H_phi
 
     x_final = G_theta(z, torch.ones_like(t), N_theta)
     formation_loss = 0
