@@ -73,9 +73,6 @@ MODEL_NAME = (
 PATH_MODEL_N_OMEGA = PATH / "models" / (MODEL_NAME + "_N_omega")
 PATH_MODEL_N_THETA = PATH / "models" / (MODEL_NAME + "_N_theta")
 
-F_FORMATION = 0 # valeur 0, 1, ou 2 correspondant à "pas de rotation", "kabsch", "umeyama"
-
-
 SIGMA = np.sqrt(VARIANCE)
 
 class ResBlock(nn.Module):
@@ -221,7 +218,7 @@ def set_positions(nb_drones, configuration, barycenter) :
         z = torch.zeros_like(x, device=device)
         res = torch.stack([x, y, z], dim=1)
     elif configuration == 1:
-        t = torch.linspace(-torch.pi, torch.pi * (1 - 2 / (NB_DRONES - 1))  , nb_drones, device=device)
+        t = torch.linspace(-torch.pi, torch.pi * (1 - 2 / (NB_DRONES + 1))  , nb_drones, device=device)
         radius = 1 / 4.
         x = torch.cos(t) * radius
         y = torch.sin(t) * radius - 1 / 4.
@@ -230,15 +227,15 @@ def set_positions(nb_drones, configuration, barycenter) :
     else: # Les oies sauvages
         x = []
         y = []
-        nb_layers = int(nb_drones ** 0.5) + 1
+        nb_layers = int((np.sqrt(8 * nb_drones + 1) - 1) / 2) + 1
         n = 0
-        total_size = 3 / 4
-        drone_gap = total_size / (2 * nb_layers - 1)
+        total_size = 1
+        drone_gap = total_size / (2 * nb_layers)
         for i in range(nb_layers):
-            for j in range(2 * i + 1):
+            for j in range(i + 1):
                 if n < nb_drones:
                     n += 1
-                    x.append((nb_layers - i + j) * drone_gap - total_size / 2)
+                    x.append((nb_layers - i + 2 * j) * drone_gap - total_size / 2)
                     y.append((nb_layers - i) * 1.41 * drone_gap - 0.5)
 
         x = torch.tensor(x, device=device)
@@ -424,16 +421,18 @@ def umeyama(x, y): # x et y sont des tenseurs torch de taille (N, 3), x est le n
 #     return R.to(device) # On renvoie la matrice de rotation optimale pour passer de x à y
 
 def f_formation(sample_x, sample_x_pushforwarded, initial_positions_pushforwarded):
-    sample_x = sample_x.to(device)
-    sample_x_pushforwarded = sample_x_pushforwarded.to(device)
+    # sample_x = sample_x.to(device)
+    # sample_x_pushforwarded = sample_x_pushforwarded.to(device)
     
     if F_FORMATION == 1: # use kabsch
         R = kabsch(initial_positions_pushforwarded, FINAL_POSITIONS)
-        x_centered = sample_x_pushforwarded - sample_x_pushforwarded.mean(dim=0, keepdim=True)
+        # x_centered = sample_x_pushforwarded - sample_x_pushforwarded.mean(dim=0, keepdim=True)
+        x_centered = initial_positions_pushforwarded - initial_positions_pushforwarded.mean(dim=0, keepdim=True)
         x_centered = x_centered @ R.T
     else: # use umeyama
         R, c = umeyama(initial_positions_pushforwarded, FINAL_POSITIONS)
-        x_centered = sample_x_pushforwarded - sample_x_pushforwarded.mean(dim=0, keepdim=True)
+        # x_centered = sample_x_pushforwarded - sample_x_pushforwarded.mean(dim=0, keepdim=True)
+        x_centered = initial_positions_pushforwarded - initial_positions_pushforwarded.mean(dim=0, keepdim=True)
         x_centered = c * x_centered @ R.T
 
     def density_estimated(pts):
@@ -448,6 +447,8 @@ def f_formation(sample_x, sample_x_pushforwarded, initial_positions_pushforwarde
 '''
 SUB-BLOCK: Collision Cost
 '''
+SECURITY_DISTANCE = 0.1
+
 def f_collision(x_batch):
     x_batch = x_batch.to(device)
     diff = x_batch.unsqueeze(1) - x_batch.unsqueeze(0)
@@ -455,8 +456,12 @@ def f_collision(x_batch):
     mask = ~torch.eye(dist_sq.size(0), dtype=torch.bool, device=dist_sq.device)
     dist_sq_no_diag = dist_sq.masked_select(mask).view(dist_sq.size(0), -1)
     loss_matrix = 1.0 / (dist_sq_no_diag + EPSILON)
+    loss_matrix = loss_matrix[dist_sq_no_diag < SECURITY_DISTANCE] # On annule le coût au delà de la distance de sécurité
 
-    return loss_matrix.mean()
+    if len(loss_matrix) == 0:
+        return torch.tensor(0)
+    else:
+        return torch.sum(loss_matrix) / len(dist_sq_no_diag)
 
 '''
 SUB-BLOCK: Obstacle Costs
@@ -635,6 +640,9 @@ def compute_loss_G(N_omega, N_theta, batch_size, T, verbose=False):
 
     if verbose:
         print("-------------------------------------------------")
+        print("Au fait")
+        print(f_formation(z, sample_x_pushforwarded, initial_positions_pushforwarded))
+        print("-------------------------------------------------")
         print(MODEL_NAME)
         print(f"{'collision_loss':20s}", f"{ALPHA_COLLISION * f_collision(x).item():.3f}")
         print(f"{'obstacle_loss':20s}", f"{ALPHA_OBSTACLE * f_obstacle(x,OBSTACLES).item():.3f}")
@@ -661,23 +669,35 @@ def test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps
 
     # Prepare a list to hold trajectories for each drone
     trajectories = []  # Each entry: NumPy array of shape [num_steps, 3]
-    value_function = []
+    grad_phi = []
 
     # Generate equally spaced time instants over the total time.
     times = torch.linspace(0, total_time, num_steps, device=device)
 
     for i in range(n):  # For each drone
         traj = []
-        values = []
+        grad = []
         for t_phys in times:
             # Normalize time to [0, 1] for network input
             t_norm = t_phys / total_time
             t_tensor = torch.tensor([[t_norm]], device=device)
             z = INITIAL_POSITIONS[i:i+1]  # Shape: [1, 3]
             pos = G_theta(z, t_tensor, N_theta)  # Output: [1, 3]
-            val = phi_omega(z, t_tensor, N_omega)
             traj.append(pos[0])
-            values.append(val[0][0])
+            
+            
+            z.requires_grad_()
+            t_tensor.requires_grad_()
+            phi_val = phi_omega(z, t_tensor, N_omega)
+            phi_val.requires_grad_()            
+            grad_phi_x, grad_phi_t = torch.autograd.grad(
+                phi_val, (z, t_tensor),
+                grad_outputs=torch.ones_like(phi_val),
+                create_graph=True
+            )
+
+            grad.append(grad_phi_x[0])
+            
             if visu:
                 t_norm = t_phys / total_time
                 t_tensor = torch.tensor([[t_norm]], device=device)
@@ -685,14 +705,14 @@ def test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps
                 pos = G_theta(z, t_tensor, N_theta)  # Output: [1, 3]
                 val = phi_omega(z, t_tensor, N_omega)
                 traj.append(pos[0])
-                values.append(val[0][0])
+                grad.append(pos[0]) # MAUVAIS MAIS OK CAR MODE VISU
                 break
         
         traj = torch.stack(traj)  # Shape: [num_steps, 3]
-        values = torch.stack(values)
+        grad = torch.stack(grad)
         # Detach before converting to NumPy
         trajectories.append(traj.cpu().detach().numpy())
-        value_function.append(values.cpu().detach().numpy())
+        grad_phi.append(grad.cpu().detach().numpy())
 
     # with open(PATH / "trajectories" / ("trajectories_" + MODEL_NAME + ".txt"), "w") as file:
     #     file.write(str(trajectories))
@@ -702,12 +722,12 @@ def test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps
 
     with open(csv_path, "w", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow(["drone", "step", "x", "y", "z", "value"])
+        writer.writerow(["drone", "step", "x", "y", "z", "grad_phi_x", "grad_phi_y", "grad_phi_z"])
         for i, traj in enumerate(trajectories):
-            values = value_function[i]
+            grad = grad_phi[i]
             for step, (x, y, z) in enumerate(traj):
-                val = values[step]
-                writer.writerow([i, step, x, y, z, val])
+                grad_x, grad_y, grad_z = grad[step]
+                writer.writerow([i, step, x, y, z, grad_x, grad_y, grad_z])
 
     # Plot the trajectories
     fig = plt.figure(figsize=(8, 6))
@@ -762,7 +782,7 @@ def save_loss_history(loss_phi_history, loss_G_history, path):
 
 def main():
     # Hyperparameters (example values; adjust as needed)
-    batch_size = 60
+    batch_size = 300
     T = TOTAL_TIME              # Normalized training horizon
     epochs = 2500    # Number of training iterations (increase for convergence)
     lambda_reg = 1.0
@@ -860,6 +880,9 @@ def main():
 
     # After training, test by plotting trajectories of n drones over 20 seconds.
     test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps=20, visu=visu)
+
+    
+
 
 
 if __name__ == "__main__":
