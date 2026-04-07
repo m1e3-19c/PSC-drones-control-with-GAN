@@ -7,7 +7,7 @@ figures/*
 trajectories/*
 !trajectories/.gitkeep
 
-random_search_results
+random_search_results/*
 !random_search_results/.gitkeep
 
 old/

@@ -9,9 +9,13 @@ import time
 PATH = pathlib.Path(sys.argv[0]).resolve().parent
 CSV_DIR_PATH = PATH / "random_search_results" 
 
+CONTENT = ""
+if len(sys.argv) >= 2:
+    CONTENT = sys.argv[1]
+
 if __name__ == "__main__":
     for filename in os.listdir(CSV_DIR_PATH):
-        if filename[-4:] == ".csv":
+        if CONTENT in filename and filename[-4:] == ".csv":
             with open(CSV_DIR_PATH / filename, "r") as file:
                 reader = csv.reader(file, delimiter=",")
                 first_line = True
