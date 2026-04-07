@@ -44,10 +44,19 @@ ALPHA_OBSTACLE = float(sys.argv[9])
 ALPHA_COLLISION = float(sys.argv[10])
 ALPHA_GRAD_PHI = float(sys.argv[11])
 F_FORMATION = int(sys.argv[12]) # entier pour la fonction de cout de formation (0 = pas de rotation autorisée, 1 = rotation autorisée avec Kabsch, 2 = rotation autorisée avec umeyama)
+F_FORMATION_NAME = "kabsch" if F_FORMATION == 1 else "umeyama" if F_FORMATION == 2 else "no-rotation"
 NB_DRONES = int(sys.argv[13])
 CHOSEN_INITIAL_FORMATION = int(sys.argv[14]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
 CHOSEN_FINAL_FORMATION = int(sys.argv[15]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
 ENVIRONMENT = int(sys.argv[16]) # Entier pour la configuration d'obstacles voulue : (0 = rien, 1 = 1 mur avec virage à faire, 2 = mur avec trou, 3 = deux grosses boules)
+
+if len(sys.argv) >= 19:
+    MAX_EPOCHS = int(sys.argv[17])
+    WRITE_RESULT_TO = sys.argv[18]
+else:
+    MAX_EPOCHS = None
+    WRITE_RESULT_TO = None
+
 
 INITIAL_BARYCENTER = torch.tensor([0, -0.5, 0], device=device)
 FINAL_BARYCENTER = torch.tensor([0, 1.25, 0], device=device)
@@ -68,7 +77,7 @@ MODEL_NAME = (
     f"alphaObst-{ALPHA_OBSTACLE}_"
     f"alphaCol-{ALPHA_COLLISION}_"
     f"alphaGradPhi-{ALPHA_GRAD_PHI}_"
-    f"config-{CHOSEN_INITIAL_FORMATION}-{CHOSEN_FINAL_FORMATION}-{ENVIRONMENT}"
+    f"config-{CHOSEN_INITIAL_FORMATION}-{CHOSEN_FINAL_FORMATION}-{ENVIRONMENT}-{F_FORMATION_NAME}"
 )
 PATH_MODEL_N_OMEGA = PATH / "models" / (MODEL_NAME + "_N_omega")
 PATH_MODEL_N_THETA = PATH / "models" / (MODEL_NAME + "_N_theta")
@@ -400,50 +409,33 @@ def umeyama(x, y): # x et y sont des tenseurs torch de taille (N, 3), x est le n
 
     return R.to(device), c # On renvoie la matrice de rotation optimale et le scaling pour passer de x à y
 
-# TODO UMEYAMA
-# def umeyama(x, y): # x et y sont des tenseurs torch de taille (N, 3), x est le nuage de référence, y le nuage à aligner
-#     x_centered = x - x.mean(dim=0)
-#     y_centered = y - y.mean(dim=0)
-#     n = x.size()[1]
-#     H = x_centered.T @ y_centered
-#     U, D, Vt = torch.svd(H)
-#     # R = Vt @ U.T
-#     S = torch.eye(H.size())
-#     if U.det() * Vt.det() < 0:
-#         S[-1, -1] = -1
-
-#     R = U @ S @ Vt
-#     c = (D @ S).trace()
-#     if torch.det(R) < 0:
-#         Vt = Vt.clone()
-#         Vt[-1, :] *= -1
-#     R = Vt @ U.T
-#     return R.to(device) # On renvoie la matrice de rotation optimale pour passer de x à y
 
 def f_formation(sample_x, sample_x_pushforwarded, initial_positions_pushforwarded):
-    # sample_x = sample_x.to(device)
-    # sample_x_pushforwarded = sample_x_pushforwarded.to(device)
+    sample_x = sample_x.to(device)
+    sample_x_pushforwarded = sample_x_pushforwarded.to(device)
     
     if F_FORMATION == 1: # use kabsch
         R = kabsch(initial_positions_pushforwarded, FINAL_POSITIONS)
-        # x_centered = sample_x_pushforwarded - sample_x_pushforwarded.mean(dim=0, keepdim=True)
-        x_centered = initial_positions_pushforwarded - initial_positions_pushforwarded.mean(dim=0, keepdim=True)
+        x_centered = sample_x_pushforwarded - sample_x_pushforwarded.mean(dim=0, keepdim=True)
+        # x_centered = initial_positions_pushforwarded - initial_positions_pushforwarded.mean(dim=0, keepdim=True)
         x_centered = x_centered @ R.T
     else: # use umeyama
         R, c = umeyama(initial_positions_pushforwarded, FINAL_POSITIONS)
-        # x_centered = sample_x_pushforwarded - sample_x_pushforwarded.mean(dim=0, keepdim=True)
-        x_centered = initial_positions_pushforwarded - initial_positions_pushforwarded.mean(dim=0, keepdim=True)
+        x_centered = sample_x_pushforwarded - sample_x_pushforwarded.mean(dim=0, keepdim=True)
+        # x_centered = initial_positions_pushforwarded - initial_positions_pushforwarded.mean(dim=0, keepdim=True)
         x_centered = c * x_centered @ R.T
 
-    def density_estimated(pts):
-        pts = pts.to(device)
-        diff = pts.unsqueeze(1) - x_centered.unsqueeze(0)
-        dist2 = (diff ** 2).sum(dim=-1)
-        gaussians = torch.exp(-dist2 / (2 * SIGMA**2))
-        norm_const = torch.tensor(2 * torch.pi * VARIANCE, device=device)**(3/2)
-        return gaussians.sum(dim=1) / (x_centered.shape[0] * norm_const)
-    d = distance_L1_torch(FINAL_DENSITY, density_estimated, n_grid=50, device=device)
-    return d
+    return f_formation_old(x_centered)
+
+    # def density_estimated(pts):
+    #     pts = pts.to(device)
+    #     diff = pts.unsqueeze(1) - x_centered.unsqueeze(0)
+    #     dist2 = (diff ** 2).sum(dim=-1)
+    #     gaussians = torch.exp(-dist2 / (2 * SIGMA**2))
+    #     norm_const = torch.tensor(2 * torch.pi * VARIANCE, device=device)**(3/2)
+    #     return gaussians.sum(dim=1) / (x_centered.shape[0] * norm_const)
+    # d = distance_L1_torch(FINAL_DENSITY, density_estimated, n_grid=50, device=device)
+    # return d
 '''
 SUB-BLOCK: Collision Cost
 '''
@@ -829,7 +821,7 @@ def main():
     
     visu = False
     infinite = True
-    while TRAIN and (infinite or target > 0.1 or cout > 200):
+    while TRAIN and (infinite or target > 0.1 or cout > 200) and (MAX_EPOCHS is None or epoch < MAX_EPOCHS):
     # while epoch < epochs:
         optimizer_phi.zero_grad()
         loss_phi_val = compute_loss_phi(N_omega, N_theta, batch_size, T, lambda_reg)
@@ -879,6 +871,11 @@ def main():
         epoch += 1
 
     # After training, test by plotting trajectories of n drones over 20 seconds.
+    if WRITE_RESULT_TO is not None:
+        with open(WRITE_RESULT_TO, "a") as file:
+            writer = csv.writer(file)
+            
+            writer.writerow([BASE_MODEL_NAME, TOTAL_TIME, VARIANCE, EPSILON, ALPHA_LOSS_G_TERMS, ALPHA_TARGET, ALPHA_FORMATION, ALPHA_OBSTACLE, ALPHA_COLLISION, ALPHA_GRAD_PHI, F_FORMATION, NB_DRONES, CHOSEN_INITIAL_FORMATION, CHOSEN_FINAL_FORMATION, ENVIRONMENT, f_target(G_theta(INITIAL_POSITIONS.to(device), torch.ones(NB_DRONES, 1, device=device)*TOTAL_TIME, N_theta))])
     test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps=20, visu=visu)
 
     
