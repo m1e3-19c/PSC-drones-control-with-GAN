@@ -832,7 +832,7 @@ def main():
     target = 2
     target = 900000
     
-    visu = True
+    visu = False
     infinite = True
     while TRAIN and (infinite or target > 0.1 or cout > 200) and (MAX_EPOCHS is None or epoch <= MAX_EPOCHS):
     # while epoch < epochs:
