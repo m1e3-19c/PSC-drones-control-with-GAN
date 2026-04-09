@@ -1,5 +1,5 @@
 import sys
-import os
+import subprocess
 import csv
 import random
 import pathlib
@@ -22,9 +22,8 @@ if len(sys.argv) < 7:
     print("usage : python3 random_search.py <name> <f_formation> <nb_drones> <initial_formation> <final_formation> <obstacles>")
     exit(1)
 
-if len(sys.argv >= 8):
+if len(sys.argv) >= 8 and sys.argv[7] in ("no_formation", "no_f"):
     LISTE["ALPHA_FORMATION"] = [0]
-    print("JE SUIS PASSÉ PAR LÀ")
 
 NAME = sys.argv[1]
 F_FORMATION = int(sys.argv[2]) # entier pour la fonction de cout de formation (0 = pas de rotation autorisée, 1 = rotation autorisée avec Kabsch, 2 = rotation autorisée avec umeyama)
@@ -65,8 +64,30 @@ if __name__ == "__main__":
         ALPHA_COLLISION = random.choice(LISTE["ALPHA_COLLISION"])
         ALPHA_GRAD_PHI = random.choice(LISTE["ALPHA_GRAD_PHI"])
 
-        print(f"./venv/bin/python3 main.py train {NAME + "_" + str(counter)} {TOTAL_TIME} {VARIANCE} {EPSILON} {ALPHA_LOSS_G_TERMS} {ALPHA_TARGET} {ALPHA_FORMATION} {ALPHA_OBSTACLE} {ALPHA_COLLISION} {ALPHA_GRAD_PHI} {F_FORMATION} {NB_DRONES} {CHOSEN_INITIAL_FORMATION} {CHOSEN_FINAL_FORMATION} {ENVIRONMENT} {MAX_EPOCH} {CSV_PATH}")
-        os.system(f"./venv/bin/python3 main.py train {NAME + "_" + str(counter)} {TOTAL_TIME} {VARIANCE} {EPSILON} {ALPHA_LOSS_G_TERMS} {ALPHA_TARGET} {ALPHA_FORMATION} {ALPHA_OBSTACLE} {ALPHA_COLLISION} {ALPHA_GRAD_PHI} {F_FORMATION} {NB_DRONES} {CHOSEN_INITIAL_FORMATION} {CHOSEN_FINAL_FORMATION} {ENVIRONMENT} {MAX_EPOCH} {CSV_PATH}")
+
+        subprocess.run(
+            [
+                "./venv/bin/python3",
+                "main.py",
+                "train",
+                str(NAME) + "_" + str(counter),
+                str(TOTAL_TIME),
+                str(VARIANCE),
+                str(EPSILON), str(ALPHA_LOSS_G_TERMS),
+                str(ALPHA_TARGET),
+                str(ALPHA_FORMATION),
+                str(ALPHA_OBSTACLE),
+                str(ALPHA_COLLISION),
+                str(ALPHA_GRAD_PHI),
+                str(F_FORMATION),
+                str(NB_DRONES),
+                str(CHOSEN_INITIAL_FORMATION),
+                str(CHOSEN_FINAL_FORMATION),
+                str(ENVIRONMENT),
+                str(MAX_EPOCH),
+                str(CSV_PATH),
+            ]
+        )
 
         # print(NAME)
         print()
