@@ -64,29 +64,31 @@ if __name__ == "__main__":
         ALPHA_COLLISION = random.choice(LISTE["ALPHA_COLLISION"])
         ALPHA_GRAD_PHI = random.choice(LISTE["ALPHA_GRAD_PHI"])
 
+        subprocess_args = [
+            "./venv/bin/python3",
+            "main.py",
+            "train",
+            str(NAME) + "_" + str(counter),
+            str(TOTAL_TIME),
+            str(VARIANCE),
+            str(EPSILON), str(ALPHA_LOSS_G_TERMS),
+            str(ALPHA_TARGET),
+            str(ALPHA_FORMATION),
+            str(ALPHA_OBSTACLE),
+            str(ALPHA_COLLISION),
+            str(ALPHA_GRAD_PHI),
+            str(F_FORMATION),
+            str(NB_DRONES),
+            str(CHOSEN_INITIAL_FORMATION),
+            str(CHOSEN_FINAL_FORMATION),
+            str(ENVIRONMENT),
+            str(MAX_EPOCH),
+            str(CSV_PATH),
+        ]
 
+        print(" ".join(subprocess_args))
         subprocess.run(
-            [
-                "./venv/bin/python3",
-                "main.py",
-                "train",
-                str(NAME) + "_" + str(counter),
-                str(TOTAL_TIME),
-                str(VARIANCE),
-                str(EPSILON), str(ALPHA_LOSS_G_TERMS),
-                str(ALPHA_TARGET),
-                str(ALPHA_FORMATION),
-                str(ALPHA_OBSTACLE),
-                str(ALPHA_COLLISION),
-                str(ALPHA_GRAD_PHI),
-                str(F_FORMATION),
-                str(NB_DRONES),
-                str(CHOSEN_INITIAL_FORMATION),
-                str(CHOSEN_FINAL_FORMATION),
-                str(ENVIRONMENT),
-                str(MAX_EPOCH),
-                str(CSV_PATH),
-            ]
+            subprocess_args
         )
 
         # print(NAME)

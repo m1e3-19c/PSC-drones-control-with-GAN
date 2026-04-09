@@ -202,8 +202,16 @@ def set_obstacles(configuration):
             [x, 0.4, z]
             for x in torch.linspace(0.2, 0.5, 3) for z in torch.linspace(-0.5, 0.5, 6)
         ]
-        INITIAL_BARYCENTER = torch.tensor([0, -0.5, 0], device=device)
-        FINAL_BARYCENTER = torch.tensor([0, 1.25, 0], device=device)
+
+        if CHOSEN_INITIAL_FORMATION == 3:
+            INITIAL_BARYCENTER = torch.tensor([0, 0.4, 0], device=device)
+        else:
+            INITIAL_BARYCENTER = torch.tensor([0, -0.5, 0], device=device)
+            
+        if CHOSEN_FINAL_FORMATION == 3:
+            FINAL_BARYCENTER = torch.tensor([0, 0.4, 0], device=device)
+        else:
+            FINAL_BARYCENTER = torch.tensor([0, 1.25, 0], device=device)
     else:
         OBSTACLES += [
             [0.3, 0.2, 0],
@@ -223,8 +231,8 @@ def set_positions(nb_drones, configuration, barycenter) :
     res = torch.tensor([])
     if configuration == 0: # Ligne droite
         x = torch.linspace(-1/4, 1/4, nb_drones, device=device)
-        y = torch.ones_like(x, device=device) * (-1/2)
-        z = torch.zeros_like(x, device=device)
+        y = torch.zeros(nb_drones, device=device) * (-1/2)
+        z = torch.zeros(nb_drones, device=device)
         res = torch.stack([x, y, z], dim=1)
     elif configuration == 1:
         t = torch.linspace(-torch.pi, torch.pi * (1 - 2 / (NB_DRONES + 1))  , nb_drones, device=device)
@@ -233,7 +241,7 @@ def set_positions(nb_drones, configuration, barycenter) :
         y = torch.sin(t) * radius - 1 / 4.
         z = torch.zeros_like(x, device=device)
         res = torch.stack([x, y, z], dim=1)
-    else: # Les oies sauvages
+    elif configuration == 2: # Les oies sauvages
         x = []
         y = []
         nb_layers = int((np.sqrt(8 * nb_drones + 1) - 1) / 2) + 1
@@ -251,6 +259,11 @@ def set_positions(nb_drones, configuration, barycenter) :
         y = torch.tensor(y, device=device)
         z = torch.zeros_like(x, device=device)
         
+        res = torch.stack([x, y, z], dim=1)
+    else: # ligne verticale
+        x = torch.zeros(nb_drones, device=device)
+        y = torch.zeros(nb_drones, device=device) * (-1/2)
+        z = torch.linspace(-1/4, 1/4, nb_drones, device=device)
         res = torch.stack([x, y, z], dim=1)
 
     return res - torch.mean(res, 0, keepdim=True) + barycenter
@@ -819,7 +832,7 @@ def main():
     target = 2
     target = 900000
     
-    visu = False
+    visu = True
     infinite = True
     while TRAIN and (infinite or target > 0.1 or cout > 200) and (MAX_EPOCHS is None or epoch <= MAX_EPOCHS):
     # while epoch < epochs:
