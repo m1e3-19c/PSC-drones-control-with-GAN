@@ -22,16 +22,16 @@ if len(sys.argv) < 7:
     print("usage : python3 random_search.py <name> <f_formation> <nb_drones> <initial_formation> <final_formation> <obstacles>")
     exit(1)
 
+if len(sys.argv >= 8):
+    LISTE["ALPHA_FORMATION"] = [0]
+    print("JE SUIS PASSÉ PAR LÀ")
+
 NAME = sys.argv[1]
 F_FORMATION = int(sys.argv[2]) # entier pour la fonction de cout de formation (0 = pas de rotation autorisée, 1 = rotation autorisée avec Kabsch, 2 = rotation autorisée avec umeyama)
 NB_DRONES = int(sys.argv[3])
 CHOSEN_INITIAL_FORMATION = int(sys.argv[4]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
 CHOSEN_FINAL_FORMATION = int(sys.argv[5]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
 ENVIRONMENT = int(sys.argv[6]) # Entier pour la configuration d'obstacles voulue : (0 = rien, 1 = 1 mur avec virage à faire, 2 = mur avec trou, 3 = deux grosses boules)
-
-if len(sys.argv) >= 8:
-    if sys.argv[7] in ("no_formation", "no_f"):
-        LISTE["ALPHA_FORMATION"] = [0]
 
 TOTAL_NAME = (
     f"{NAME}_"
@@ -65,6 +65,7 @@ if __name__ == "__main__":
         ALPHA_COLLISION = random.choice(LISTE["ALPHA_COLLISION"])
         ALPHA_GRAD_PHI = random.choice(LISTE["ALPHA_GRAD_PHI"])
 
+        print(f"./venv/bin/python3 main.py train {NAME + "_" + str(counter)} {TOTAL_TIME} {VARIANCE} {EPSILON} {ALPHA_LOSS_G_TERMS} {ALPHA_TARGET} {ALPHA_FORMATION} {ALPHA_OBSTACLE} {ALPHA_COLLISION} {ALPHA_GRAD_PHI} {F_FORMATION} {NB_DRONES} {CHOSEN_INITIAL_FORMATION} {CHOSEN_FINAL_FORMATION} {ENVIRONMENT} {MAX_EPOCH} {CSV_PATH}")
         os.system(f"./venv/bin/python3 main.py train {NAME + "_" + str(counter)} {TOTAL_TIME} {VARIANCE} {EPSILON} {ALPHA_LOSS_G_TERMS} {ALPHA_TARGET} {ALPHA_FORMATION} {ALPHA_OBSTACLE} {ALPHA_COLLISION} {ALPHA_GRAD_PHI} {F_FORMATION} {NB_DRONES} {CHOSEN_INITIAL_FORMATION} {CHOSEN_FINAL_FORMATION} {ENVIRONMENT} {MAX_EPOCH} {CSV_PATH}")
 
         # print(NAME)
