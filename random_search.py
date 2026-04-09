@@ -29,6 +29,10 @@ CHOSEN_INITIAL_FORMATION = int(sys.argv[4]) # Entier pour la formation des drone
 CHOSEN_FINAL_FORMATION = int(sys.argv[5]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
 ENVIRONMENT = int(sys.argv[6]) # Entier pour la configuration d'obstacles voulue : (0 = rien, 1 = 1 mur avec virage à faire, 2 = mur avec trou, 3 = deux grosses boules)
 
+if len(sys.argv) >= 8:
+    if sys.argv[7] in ("no_formation", "no_f"):
+        LISTE["ALPHA_FORMATION"] = [0]
+
 TOTAL_NAME = (
     f"{NAME}_"
     f"f_form-{F_FORMATION}_"
@@ -48,7 +52,9 @@ if __name__ == "__main__":
         writer = csv.writer(file)
         writer.writerow(["name", "total_time", "variance", "epsilon", "alpha_loss_g_terms", "alpha_target", "alpha_formation", "alpha_obstacle", "alpha_collision", "alpha_grad_phi", "fonction_cout", "nb_drones", "initial_formaiton", "final_formation", "obstacles", "target_loss"])
 
+    counter = 0
     while True:
+        counter += 1
         TOTAL_TIME = random.choice(LISTE["TOTAL_TIME"])
         VARIANCE = random.choice(LISTE["VARIANCE"])
         EPSILON = random.choice(LISTE["EPSILON"])
@@ -59,7 +65,7 @@ if __name__ == "__main__":
         ALPHA_COLLISION = random.choice(LISTE["ALPHA_COLLISION"])
         ALPHA_GRAD_PHI = random.choice(LISTE["ALPHA_GRAD_PHI"])
 
-        os.system(f"./venv/bin/python3 main.py train {NAME} {TOTAL_TIME} {VARIANCE} {EPSILON} {ALPHA_LOSS_G_TERMS} {ALPHA_TARGET} {ALPHA_FORMATION} {ALPHA_OBSTACLE} {ALPHA_COLLISION} {ALPHA_GRAD_PHI} {F_FORMATION} {NB_DRONES} {CHOSEN_INITIAL_FORMATION} {CHOSEN_FINAL_FORMATION} {ENVIRONMENT} {MAX_EPOCH} {CSV_PATH}")
+        os.system(f"./venv/bin/python3 main.py train {NAME + "_" + str(counter)} {TOTAL_TIME} {VARIANCE} {EPSILON} {ALPHA_LOSS_G_TERMS} {ALPHA_TARGET} {ALPHA_FORMATION} {ALPHA_OBSTACLE} {ALPHA_COLLISION} {ALPHA_GRAD_PHI} {F_FORMATION} {NB_DRONES} {CHOSEN_INITIAL_FORMATION} {CHOSEN_FINAL_FORMATION} {ENVIRONMENT} {MAX_EPOCH} {CSV_PATH}")
 
         # print(NAME)
         print()

@@ -821,7 +821,7 @@ def main():
     
     visu = False
     infinite = True
-    while TRAIN and (infinite or target > 0.1 or cout > 200) and (MAX_EPOCHS is None or epoch < MAX_EPOCHS):
+    while TRAIN and (infinite or target > 0.1 or cout > 200) and (MAX_EPOCHS is None or epoch <= MAX_EPOCHS):
     # while epoch < epochs:
         optimizer_phi.zero_grad()
         loss_phi_val = compute_loss_phi(N_omega, N_theta, batch_size, T, lambda_reg)
