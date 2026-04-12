@@ -31,28 +31,29 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Training Params:
 if len(sys.argv) < 17:
-    print("usage : python3 main.py <[train / load]> <model_name> <total_time> <variance> <epsilon> <alpha_loss_g_terms> <alpha_target> <alpha_formation> <alpha_obstacle> <alpha_collision> <alpha_grad_phi> <fonction de cout> <nb drones> <formation voulue au départ> <formation voulue à l'arrivée> <obstacles>")
+    print("usage : python3 main.py <[train / load]> <model_name> <total_time> <variance> <epsilon> <exponent> <alpha_loss_g_terms> <alpha_target> <alpha_formation> <alpha_obstacle> <alpha_collision> <alpha_grad_phi> <fonction de cout> <nb drones> <formation voulue au départ> <formation voulue à l'arrivée> <obstacles>")
     exit(1)
 
 TOTAL_TIME = float(sys.argv[3])
 VARIANCE = float(sys.argv[4])
 EPSILON = float(sys.argv[5])
-ALPHA_LOSS_G_TERMS = float(sys.argv[6])
-ALPHA_TARGET = float(sys.argv[7])
-ALPHA_FORMATION = float(sys.argv[8])
-ALPHA_OBSTACLE = float(sys.argv[9])
-ALPHA_COLLISION = float(sys.argv[10])
-ALPHA_GRAD_PHI = float(sys.argv[11])
-F_FORMATION = int(sys.argv[12]) # entier pour la fonction de cout de formation (0 = pas de rotation autorisée, 1 = rotation autorisée avec Kabsch, 2 = rotation autorisée avec umeyama)
+EXP = float(sys.argv[6])
+ALPHA_LOSS_G_TERMS = float(sys.argv[7])
+ALPHA_TARGET = float(sys.argv[8])
+ALPHA_FORMATION = float(sys.argv[9])
+ALPHA_OBSTACLE = float(sys.argv[10])
+ALPHA_COLLISION = float(sys.argv[11])
+ALPHA_GRAD_PHI = float(sys.argv[12])
+F_FORMATION = int(sys.argv[13]) # entier pour la fonction de cout de formation (0 = pas de rotation autorisée, 1 = rotation autorisée avec Kabsch, 2 = rotation autorisée avec umeyama)
 F_FORMATION_NAME = "kabsch" if F_FORMATION == 1 else "umeyama" if F_FORMATION == 2 else "no-rotation"
-NB_DRONES = int(sys.argv[13])
-CHOSEN_INITIAL_FORMATION = int(sys.argv[14]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
-CHOSEN_FINAL_FORMATION = int(sys.argv[15]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
-ENVIRONMENT = int(sys.argv[16]) # Entier pour la configuration d'obstacles voulue : (0 = rien, 1 = 1 mur avec virage à faire, 2 = mur avec trou, 3 = deux grosses boules)
+NB_DRONES = int(sys.argv[14])
+CHOSEN_INITIAL_FORMATION = int(sys.argv[15]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
+CHOSEN_FINAL_FORMATION = int(sys.argv[16]) # Entier pour la formation des drones : (0 = ligne droite, 1 = cercle, 2 = triangle plein)
+ENVIRONMENT = int(sys.argv[17]) # Entier pour la configuration d'obstacles voulue : (0 = rien, 1 = 1 mur avec virage à faire, 2 = mur avec trou, 3 = deux grosses boules)
 
-if len(sys.argv) >= 19:
-    MAX_EPOCHS = int(sys.argv[17])
-    WRITE_RESULT_TO = sys.argv[18]
+if len(sys.argv) >= 20:
+    MAX_EPOCHS = int(sys.argv[18])
+    WRITE_RESULT_TO = sys.argv[19]
 else:
     MAX_EPOCHS = None
     WRITE_RESULT_TO = None
@@ -71,6 +72,7 @@ MODEL_NAME = (
     f"T-{TOTAL_TIME}_"
     f"variance-{VARIANCE}_"
     f"eps-{EPSILON}_"
+    f"exp-{EXP}_"
     f"alphaG-{ALPHA_LOSS_G_TERMS}_"
     f"alphaTarget-{ALPHA_TARGET}_"
     f"alphaForm-{ALPHA_FORMATION}_"
@@ -203,12 +205,12 @@ def set_obstacles(configuration):
             for x in torch.linspace(0.2, 0.5, 3) for z in torch.linspace(-0.5, 0.5, 6)
         ]
 
-        if CHOSEN_INITIAL_FORMATION == 3:
+        if CHOSEN_INITIAL_FORMATION >= 3:
             INITIAL_BARYCENTER = torch.tensor([0, 0.4, 0], device=device)
         else:
             INITIAL_BARYCENTER = torch.tensor([0, -0.5, 0], device=device)
             
-        if CHOSEN_FINAL_FORMATION == 3:
+        if CHOSEN_FINAL_FORMATION >= 3:
             FINAL_BARYCENTER = torch.tensor([0, 0.4, 0], device=device)
         else:
             FINAL_BARYCENTER = torch.tensor([0, 1.25, 0], device=device)
@@ -229,6 +231,19 @@ set_obstacles(ENVIRONMENT)
 
 def set_positions(nb_drones, configuration, barycenter) :
     res = torch.tensor([])
+    rotation_matrix = torch.eye(3, device=device)
+    if configuration >= 3:
+        configuration -= 3
+        rotation_matrix = torch.tensor(
+            [
+                [0., 0., 1.],
+                [0., 1., 0.],
+                [-1., 0., 0.]
+            ],
+            device=device
+        )
+
+
     if configuration == 0: # Ligne droite
         x = torch.linspace(-1/4, 1/4, nb_drones, device=device)
         y = torch.zeros(nb_drones, device=device) * (-1/2)
@@ -266,7 +281,7 @@ def set_positions(nb_drones, configuration, barycenter) :
         z = torch.linspace(-1/4, 1/4, nb_drones, device=device)
         res = torch.stack([x, y, z], dim=1)
 
-    return res - torch.mean(res, 0, keepdim=True) + barycenter
+    return (res - torch.mean(res, 0, keepdim=True)) @ rotation_matrix.T + barycenter
         
 # variance = 0.003
 
@@ -514,7 +529,7 @@ def f_obstacle(x, obstacles):
         for i in range(batch_size):
             Q = torch.norm(x[i] - obstacle_tensor)
             if Q < 2. * OBSTACLE_SIZE: # TODO : 
-                cost += 1.0 / (max(Q-OBSTACLE_SIZE, 0) + eps) 
+                cost += 1.0 / (max(Q-OBSTACLE_SIZE, 0) ** EXP + eps) 
     return torch.tensor(cost / batch_size)
 
 
@@ -680,27 +695,29 @@ def test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps
     times = torch.linspace(0, total_time, num_steps, device=device)
 
     for i in range(n):  # For each drone
-        traj = []
-        grad = []
+        traj1 = []
+        traj2 = [INITIAL_POSITIONS[i]]
+        grad = [torch.zeros_like(traj2[0])]
         for t_phys in times:
             # Normalize time to [0, 1] for network input
             t_norm = t_phys / total_time
             t_tensor = torch.tensor([[t_norm]], device=device)
             z = INITIAL_POSITIONS[i:i+1]  # Shape: [1, 3]
             pos = G_theta(z, t_tensor, N_theta)  # Output: [1, 3]
-            traj.append(pos[0])
+            traj1.append(pos[0])
             
-            
-            z.requires_grad_()
+            pos = traj2[-1].unsqueeze(0)
+            pos.requires_grad_()
             t_tensor.requires_grad_()
-            phi_val = phi_omega(z, t_tensor, N_omega)
+            phi_val = phi_omega(pos, t_tensor, N_omega)
             phi_val.requires_grad_()            
             grad_phi_x, grad_phi_t = torch.autograd.grad(
-                phi_val, (z, t_tensor),
+                phi_val, (pos, t_tensor),
                 grad_outputs=torch.ones_like(phi_val),
                 create_graph=True
             )
 
+            traj2.append(pos[0] - grad_phi_x[0] * total_time / num_steps)
             grad.append(grad_phi_x[0])
             
             if visu:
@@ -708,15 +725,17 @@ def test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps
                 t_tensor = torch.tensor([[t_norm]], device=device)
                 z = FINAL_POSITIONS[i:i+1]  # Shape: [1, 3]
                 pos = G_theta(z, t_tensor, N_theta)  # Output: [1, 3]
-                val = phi_omega(z, t_tensor, N_omega)
-                traj.append(pos[0])
+                val = phi_omega(pos, t_tensor, N_omega)
+                traj1.append(pos[0])
+                traj1.append(pos[0])
                 grad.append(pos[0]) # MAUVAIS MAIS OK CAR MODE VISU
                 break
         
-        traj = torch.stack(traj)  # Shape: [num_steps, 3]
+        traj1 = torch.stack(traj1)  # Shape: [num_steps, 3]
+        traj2 = torch.stack(traj2)  # Shape: [num_steps, 3]
         grad = torch.stack(grad)
         # Detach before converting to NumPy
-        trajectories.append(traj.cpu().detach().numpy())
+        trajectories.append(traj1.cpu().detach().numpy())
         grad_phi.append(grad.cpu().detach().numpy())
 
     # with open(PATH / "trajectories" / ("trajectories_" + MODEL_NAME + ".txt"), "w") as file:
@@ -883,13 +902,13 @@ def main():
 
         epoch += 1
 
-    # After training, test by plotting trajectories of n drones over 20 seconds.
+    # After training, test by plotting trajectories of n drones over TOTAL_TIME.
     if WRITE_RESULT_TO is not None:
         with open(WRITE_RESULT_TO, "a") as file:
             writer = csv.writer(file)
             
-            writer.writerow([BASE_MODEL_NAME, TOTAL_TIME, VARIANCE, EPSILON, ALPHA_LOSS_G_TERMS, ALPHA_TARGET, ALPHA_FORMATION, ALPHA_OBSTACLE, ALPHA_COLLISION, ALPHA_GRAD_PHI, F_FORMATION, NB_DRONES, CHOSEN_INITIAL_FORMATION, CHOSEN_FINAL_FORMATION, ENVIRONMENT, f_target(G_theta(INITIAL_POSITIONS.to(device), torch.ones(NB_DRONES, 1, device=device)*TOTAL_TIME, N_theta))])
-    test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps=20, visu=visu)
+            writer.writerow([BASE_MODEL_NAME, TOTAL_TIME, VARIANCE, EPSILON, EXP, ALPHA_LOSS_G_TERMS, ALPHA_TARGET, ALPHA_FORMATION, ALPHA_OBSTACLE, ALPHA_COLLISION, ALPHA_GRAD_PHI, F_FORMATION, NB_DRONES, CHOSEN_INITIAL_FORMATION, CHOSEN_FINAL_FORMATION, ENVIRONMENT, f_target(G_theta(INITIAL_POSITIONS.to(device), torch.ones(NB_DRONES, 1, device=device)*TOTAL_TIME, N_theta))])
+    test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps=50, visu=visu)
 
     
 

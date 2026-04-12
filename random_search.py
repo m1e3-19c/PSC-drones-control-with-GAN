@@ -9,6 +9,7 @@ LISTE = {
     "TOTAL_TIME": [0.8, 0.9, 1, 1, 1, 1, 1, 1.1, 1.2],
     "VARIANCE": [0.001, 0.003, 0.01],
     "EPSILON": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
+    "EXP": [0.5, 1, 2],
     "ALPHA_LOSS_G_TERMS": [0.1, 0.4, 1, 4, 10, 40, 100],
     "ALPHA_TARGET": [100, 300, 700, 1000, 3000, 7000],
     "ALPHA_FORMATION": [100, 300, 700, 1000, 3000, 7000],
@@ -19,7 +20,7 @@ LISTE = {
 
 
 if len(sys.argv) < 7:
-    print("usage : python3 random_search.py <name> <f_formation> <nb_drones> <initial_formation> <final_formation> <obstacles>")
+    print("usage : python3 random_search.py <name> <f_formation> <nb_drones> <initial_formation> <final_formation> <obstacles> [no_formation]")
     exit(1)
 
 if len(sys.argv) >= 8 and sys.argv[7] in ("no_formation", "no_f"):
@@ -49,7 +50,7 @@ CSV_PATH = PATH / "random_search_results" / ("result_" + TOTAL_NAME + ".csv")
 if __name__ == "__main__":
     with open(CSV_PATH, "a") as file:
         writer = csv.writer(file)
-        writer.writerow(["name", "total_time", "variance", "epsilon", "alpha_loss_g_terms", "alpha_target", "alpha_formation", "alpha_obstacle", "alpha_collision", "alpha_grad_phi", "fonction_cout", "nb_drones", "initial_formaiton", "final_formation", "obstacles", "target_loss"])
+        writer.writerow(["name", "total_time", "variance", "epsilon", "exponent", "alpha_loss_g_terms", "alpha_target", "alpha_formation", "alpha_obstacle", "alpha_collision", "alpha_grad_phi", "fonction_cout", "nb_drones", "initial_formaiton", "final_formation", "obstacles", "target_loss"])
 
     counter = 0
     while True:
@@ -57,6 +58,7 @@ if __name__ == "__main__":
         TOTAL_TIME = random.choice(LISTE["TOTAL_TIME"])
         VARIANCE = random.choice(LISTE["VARIANCE"])
         EPSILON = random.choice(LISTE["EPSILON"])
+        EXP = random.choice(LISTE["EXP"])
         ALPHA_LOSS_G_TERMS = random.choice(LISTE["ALPHA_LOSS_G_TERMS"])
         ALPHA_TARGET = random.choice(LISTE["ALPHA_TARGET"])
         ALPHA_FORMATION = random.choice(LISTE["ALPHA_FORMATION"])
@@ -71,6 +73,7 @@ if __name__ == "__main__":
             str(NAME) + "_" + str(counter),
             str(TOTAL_TIME),
             str(VARIANCE),
+            str(EXP),
             str(EPSILON), str(ALPHA_LOSS_G_TERMS),
             str(ALPHA_TARGET),
             str(ALPHA_FORMATION),
