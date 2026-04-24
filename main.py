@@ -1,11 +1,7 @@
 ##################################################################################################################################################################################################################
 #                                                                     DRONES CONTROL VIA GAN MODEL
-#                                                       Participants:
-#                                                       Mohamed-Reda Salhi: mohamed-reda.salhi@polytehnique.edu
-#                                                       Joseph Combourieu: joseph.combourieu@polytechnique.edu
-#                                                       Mohssin Bakraoui : mohssin.bakraoui@polytechnique.edu
-#                                                       Andrea Bourelly: andrea.bourelly@polytechnique.edu
-#                                                       In collaboration with MBDA
+#                                                       
+#                                                              Scientific project in collaboration with MBDA
 ##################################################################################################################################################################################################################
 
 
@@ -72,7 +68,7 @@ MODEL_NAME = (
     f"T-{TOTAL_TIME}_"
     f"variance-{VARIANCE}_"
     f"eps-{EPSILON}_"
-    f"exp-{EXP}_"
+    # f"exp-{EXP}_"
     f"alphaG-{ALPHA_LOSS_G_TERMS}_"
     f"alphaTarget-{ALPHA_TARGET}_"
     f"alphaForm-{ALPHA_FORMATION}_"
@@ -161,23 +157,6 @@ SUB-BLOCK: Formation cost
 '''
 A = 0.1
 
-# boite = [
-#     [x, 1.5, z]
-#     for x in torch.linspace(-0.5, 0.5, 6) for z in torch.linspace(-0.5, 0.5, 6)
-# ] + [
-#     [-0.5, y, z]
-#     for y in torch.linspace(0.5, 1.5, 6) for z in torch.linspace(-0.5, 0.5, 6)
-# ] + [
-#     [0.5, y, z]
-#     for y in torch.linspace(0.5, 1.5, 7) for z in torch.linspace(-0.5, 0.5, 6)
-# ] + [
-#     [x, y, -0.5]
-#     for x in torch.linspace(-0.5, 0.5, 6) for y in torch.linspace(0.5, 1.5, 7)
-# ] + [
-#     [x, y, 0.5]
-#     for x in torch.linspace(-0.5, 0.5, 6) for y in torch.linspace(0.5, 1.5, 7)
-# ]
-
 
 OBSTACLES = []
 OBSTACLE_SIZE = 0.1
@@ -205,12 +184,12 @@ def set_obstacles(configuration):
             for x in torch.linspace(0.2, 0.5, 3) for z in torch.linspace(-0.5, 0.5, 6)
         ]
 
-        if CHOSEN_INITIAL_FORMATION >= 3:
+        if CHOSEN_INITIAL_FORMATION == 3:
             INITIAL_BARYCENTER = torch.tensor([0, 0.4, 0], device=device)
         else:
             INITIAL_BARYCENTER = torch.tensor([0, -0.5, 0], device=device)
             
-        if CHOSEN_FINAL_FORMATION >= 3:
+        if CHOSEN_FINAL_FORMATION == 3:
             FINAL_BARYCENTER = torch.tensor([0, 0.4, 0], device=device)
         else:
             FINAL_BARYCENTER = torch.tensor([0, 1.25, 0], device=device)
@@ -231,19 +210,6 @@ set_obstacles(ENVIRONMENT)
 
 def set_positions(nb_drones, configuration, barycenter) :
     res = torch.tensor([])
-    rotation_matrix = torch.eye(3, device=device)
-    if configuration >= 3:
-        configuration -= 3
-        rotation_matrix = torch.tensor(
-            [
-                [0., 0., 1.],
-                [0., 1., 0.],
-                [-1., 0., 0.]
-            ],
-            device=device
-        )
-
-
     if configuration == 0: # Ligne droite
         x = torch.linspace(-1/4, 1/4, nb_drones, device=device)
         y = torch.zeros(nb_drones, device=device) * (-1/2)
@@ -281,7 +247,7 @@ def set_positions(nb_drones, configuration, barycenter) :
         z = torch.linspace(-1/4, 1/4, nb_drones, device=device)
         res = torch.stack([x, y, z], dim=1)
 
-    return (res - torch.mean(res, 0, keepdim=True)) @ rotation_matrix.T + barycenter
+    return res - torch.mean(res, 0, keepdim=True) + barycenter
         
 # variance = 0.003
 
@@ -337,65 +303,6 @@ def f_formation_old(x, device=device):
         return gaussians.sum(dim=1) / (x_centered.shape[0] * norm_const)
     d = distance_L1_torch(FINAL_DENSITY, density_estimated, n_grid=50, device=device)
     return d
-
-# def compute_covariance_matrix(centered_samples):
-#     """
-#     Calcule la matrice de covariance sur les données CENTRÉES.
-#     """
-#     # Échantillonnage uniforme :
-#     # samples = torch.rand(num_samples, 3) * (limits[1] - limits[0]) + limits[0]
-    
-#     # barycentre selon la valeur de la densité en chaque point :
-#     # densities = density_func(samples)
-#     # weights = densities / torch.sum(densities)
-#     # weights_2d = weights.unsqueeze(1).repeat(1, 3)
-#     # m = torch.sum(samples) / len(samples)
-
-#     # soustraction du barycentre :
-#     # centered_samples = samples - m
-    
-#     # Matrice de covariance sur données centrées
-#     cov_mat = torch.zeros((3, 3), device=device)
-#     for i in range(3):
-#         for j in range(3):
-#             cov_mat[i,j] = torch.sum(centered_samples[:,i] * centered_samples[:,j])
-    
-#     return cov_mat
-
-# Pour comparer deux formations :
-# def get_sorted_eigenvalues(cov_matrix):
-#     """
-#     Retourne les valeurs propres d'une matrice de covariance triées par ordre croissant.
-#     """
-#     eigenvalues = torch.linalg.eigvals(cov_matrix).double().to(device)
-#     eigenvalues.sort()
-#     return eigenvalues[0]
-
-# def eigen_distance_squared(eigenvalues1, eigenvalues2):
-#     """
-#     Calcule la distance entre deux listes de valeurs propres triées.
-#     """
-#     return torch.sum((eigenvalues1 - eigenvalues2)**2)
-
-# def compare_densities(density_func1, density_func2):
-#     cov_mat_1 = compute_covariance_matrix_centered(density_func1, limits=(-10, 10), num_samples=500000)
-#     cov_mat_2 = compute_covariance_matrix_centered(density_func2, limits=(-10, 10), num_samples=500000)
-#     eigenvalues_1 = get_sorted_eigenvalues(cov_mat_1)
-#     eigenvalues_2 = get_sorted_eigenvalues(cov_mat_2)
-
-#     return eigen_distance_squared(eigenvalues_1, eigenvalues_2)
-
-# def f_formation_eigenvalues(sample_x, sample_x_pushforwarded):
-#     x1 = sample_x.to(device)
-#     x2 = sample_x_pushforwarded.to(device)
-
-#     x1_centered = x1 - x1.mean(dim=0, keepdim=True)
-#     x2_centered = x2 - x2.mean(dim=0, keepdim=True)
-
-#     cov_mat_1 = compute_covariance_matrix(x1_centered)
-#     cov_mat_2 = compute_covariance_matrix(x2_centered)
-
-#     return eigen_distance_squared(get_sorted_eigenvalues(cov_mat_1), get_sorted_eigenvalues(cov_mat_2))
 
 def kabsch(x, y): # x et y sont des tenseurs torch de taille (N, 3), x est le nuage de référence, y le nuage à aligner
     x_centered = x - x.mean(dim=0)
@@ -454,16 +361,6 @@ def f_formation(sample_x, sample_x_pushforwarded, initial_positions_pushforwarde
         x_centered = c * x_centered @ R.T
 
     return f_formation_old(x_centered)
-
-    # def density_estimated(pts):
-    #     pts = pts.to(device)
-    #     diff = pts.unsqueeze(1) - x_centered.unsqueeze(0)
-    #     dist2 = (diff ** 2).sum(dim=-1)
-    #     gaussians = torch.exp(-dist2 / (2 * SIGMA**2))
-    #     norm_const = torch.tensor(2 * torch.pi * VARIANCE, device=device)**(3/2)
-    #     return gaussians.sum(dim=1) / (x_centered.shape[0] * norm_const)
-    # d = distance_L1_torch(FINAL_DENSITY, density_estimated, n_grid=50, device=device)
-    # return d
 '''
 SUB-BLOCK: Collision Cost
 '''
@@ -486,35 +383,6 @@ def f_collision(x_batch):
 '''
 SUB-BLOCK: Obstacle Costs
 '''
-# boite = [
-#     [
-#         -1/2 + i / 7,
-#         -1 + j / 10,
-#         1/2
-#     ]
-#     for i in range(7) for j in range(15)
-# ] + [
-#     [
-#         -1/2 + i / 7,
-#         -1 + j / 10,
-#         -1/2
-#     ]
-#     for i in range(7) for j in range(15)
-# ] + [
-#     [
-#         -1/2,
-#         -1 + j / 10,
-#         -1/2 + k / 10
-#     ]
-#     for j in range(15) for k in range(10)
-# ] + [
-#     [
-#         1/2,
-#         -1 + j / 10,
-#         -1/2 + k / 10
-#     ]
-#     for j in range(15) for k in range(10)
-# ]
 
 def f_obstacle(x, obstacles):
     eps = EPSILON
@@ -539,16 +407,6 @@ def f_obstacle(x, obstacles):
 #BLOCK 2:  optimization part
 ##############################################################
 # this is part very theoritical I advise you to go read the report 
-
-# def sample_from_wave_density(batch_size):
-#     sigma = np.sqrt(variance)
-#     k = 2 * m.pi / 0.5
-#     x = torch.rand(batch_size, device=device) - 0.5
-#     y = A * torch.sin(k * x)
-#     z = torch.zeros_like(x, device=device)
-#     points = torch.stack([x, y, z], dim=1)
-#     noise = torch.randn_like(points, device=device) * sigma
-#     return points + noise
 
 def generate_sample(batch_size):
     return torch.rand((batch_size, 3), device=device)*2. - 1  # x dans [-1, 1]
@@ -725,9 +583,8 @@ def test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps
                 t_tensor = torch.tensor([[t_norm]], device=device)
                 z = FINAL_POSITIONS[i:i+1]  # Shape: [1, 3]
                 pos = G_theta(z, t_tensor, N_theta)  # Output: [1, 3]
-                val = phi_omega(pos, t_tensor, N_omega)
-                traj1.append(pos[0])
-                traj1.append(pos[0])
+                val = phi_omega(z, t_tensor, N_omega)
+                traj.append(pos[0])
                 grad.append(pos[0]) # MAUVAIS MAIS OK CAR MODE VISU
                 break
         
@@ -907,7 +764,7 @@ def main():
         with open(WRITE_RESULT_TO, "a") as file:
             writer = csv.writer(file)
             
-            writer.writerow([BASE_MODEL_NAME, TOTAL_TIME, VARIANCE, EPSILON, EXP, ALPHA_LOSS_G_TERMS, ALPHA_TARGET, ALPHA_FORMATION, ALPHA_OBSTACLE, ALPHA_COLLISION, ALPHA_GRAD_PHI, F_FORMATION, NB_DRONES, CHOSEN_INITIAL_FORMATION, CHOSEN_FINAL_FORMATION, ENVIRONMENT, f_target(G_theta(INITIAL_POSITIONS.to(device), torch.ones(NB_DRONES, 1, device=device)*TOTAL_TIME, N_theta))])
+            writer.writerow([BASE_MODEL_NAME, TOTAL_TIME, VARIANCE, EPSILON, ALPHA_LOSS_G_TERMS, ALPHA_TARGET, ALPHA_FORMATION, ALPHA_OBSTACLE, ALPHA_COLLISION, ALPHA_GRAD_PHI, F_FORMATION, NB_DRONES, CHOSEN_INITIAL_FORMATION, CHOSEN_FINAL_FORMATION, ENVIRONMENT, f_target(G_theta(INITIAL_POSITIONS.to(device), torch.ones(NB_DRONES, 1, device=device)*TOTAL_TIME, N_theta))])
     test_wave_trajectories(n, N_theta, N_omega, total_time=TOTAL_TIME, num_steps=50, visu=visu)
 
     
